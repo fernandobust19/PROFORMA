@@ -497,10 +497,21 @@
         <h2 id="subtotal" style="font-size: 9px;"> </h2>
         <h2 id="iva" style="font-size: 8px;"></h2>
         <h2 id="total" style="font-size: 15px;">Total: $0.00</h2>
-        <div>
-            <label for="nombreVendedorDisplay">Vendedor:</label>
-            <span id="nombreVendedorDisplay" style="font-weight: bold;"></span>
+        <div style="margin-top: 6px; font-size: 11px;">
+            <span><b>Vendedor:</b> <span id="nombreVendedorDisplay" style="font-weight: bold;"></span></span><br>
+            <span id="fechaProforma"></span><br>
+            <span style="color:#007bff; font-size:12px;">www.conupcons.com</span>
         </div>
+<script>
+// Mostrar la fecha actual en la proforma
+function mostrarFechaProforma() {
+    var fecha = new Date();
+    var opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    var fechaTexto = 'Fecha: ' + fecha.toLocaleDateString('es-EC', opciones);
+    document.getElementById('fechaProforma').textContent = fechaTexto;
+}
+mostrarFechaProforma();
+</script>
 <script>
 // Modal animado para ingresar el nombre del archivo y guardar
 function mostrarModalNombreArchivo() {
@@ -644,13 +655,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Escribir el nombre del vendedor en la proforma
         vendedorDisplay.innerText = vendedor;
 
-        const proforma = document.getElementById("proforma");
         // Ocultar elementos no-imagen temporalmente
         const ocultar = document.querySelectorAll('.no-imagen');
         ocultar.forEach(el => el.style.display = 'none');
         // Esperar un pequeño tiempo para que el DOM se actualice
         setTimeout(() => {
-                html2canvas(proforma, {
+            const proforma = document.getElementById("proforma");
+            html2canvas(proforma, {
                 scale: 2,
                 useCORS: true,
                 backgroundColor: "#ffffff"
@@ -669,7 +680,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     );
                 } else {
                     const enlace = document.createElement("a");
-                        enlace.href = dataUrl;
+                    enlace.href = dataUrl;
                     enlace.download = "proforma.jpg";
                     enlace.click();
                 }
@@ -1108,23 +1119,7 @@ function guardarPagina() {
         });
     }
 
-    function mostrarFechaActual() {
-        var fecha = new Date();
-        var fechaString = fecha.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        var horaString = fecha.toLocaleTimeString('es-ES');
-        var fechaHora = fechaString + ' - ' + horaString;
-
-                var divFecha = document.createElement('div');
-                        divFecha.innerHTML = '<p>Fecha: ' + fechaHora + '</p>' +
-                            '<div style="text-align:center;margin-top:-2px;">' +
-                            '<a href="https://www.conupcons.com" target="_blank" style="font-size:17px;color:#007bff;text-decoration:none;font-weight:600;">www.conupcons.com</a>' +
-                            '</div>';
-
-        var proformaContainer = document.getElementById('proforma');
-        proformaContainer.appendChild(divFecha);
-    }
-
-    mostrarFechaActual();
+    // función mostrarFechaActual eliminada para evitar duplicado de fecha
     
     
     
