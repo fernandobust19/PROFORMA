@@ -501,6 +501,10 @@ async function cargarProductosDesdeGoogleSheets() {
 function inicializarProductos() {
     cargarProductosDesdeGoogleSheets();
 }
+
+// Hacer funciones globales para los eventos HTML
+window.copiarNombreYPrecio = copiarNombreYPrecio;
+window.agregarProducto = agregarProducto;
 </script>
 
     
