@@ -171,7 +171,7 @@
     font-size: 12px;
     padding: 5px 18px 5px 14px;
     min-width: 100px;
-    border: 2px solid #fff;
+    border: none;
     border-radius: 22px;
     box-shadow: 0 2px 8px #0002, 0 0 0 1.5px #bbb, 0 2px 6px #fff8 inset;
     font-weight: 700;
@@ -186,19 +186,19 @@
 }
 /* Colores individuales */
 .btn-rojo {
-    background: linear-gradient(180deg, #ff4d4d 0%, #c0392b 100%);
+    background: linear-gradient(180deg, #b0b3b8 0%, #6c6f75 100%);
     color: #fff;
-    border-color: #fff;
+    border: none;
 }
 .btn-verde {
     background: linear-gradient(180deg, #7be676 0%, #2ecc40 100%);
     color: #fff;
-    border-color: #fff;
+    border: none;
 }
 .btn-azul {
     background: linear-gradient(180deg, #4da6ff 0%, #0056b3 100%);
     color: #fff;
-    border-color: #fff;
+    border: none;
 }
 .proforma-action-btn:hover, .action-button:hover {
     transform: translateY(-1px) scale(1.02);
@@ -356,7 +356,7 @@
 <body onload="inicializarProductos();">
 
                 <div style="position:relative;min-height:54px;margin-bottom:8px;">
-                    <h1 style="margin:0;font-size:1.015rem;">UP-CONS IMPORTADOR</h1>
+                    <h1 style="margin:0;font-size:1.7rem;font-weight:bold;">UP-CONS IMPORTADOR</h1>
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;" />
                 </div>
     <div class="formulario">
@@ -424,7 +424,7 @@
             
             
         <div class="item-container">
-    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 230px; font-size: 12px;">
+    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 340px; font-size: 12px;">
 </div>
 
 <div class="item-container">PRECIO ➡️
@@ -453,9 +453,9 @@
     
     
 
-<div style="display: flex; justify-content: flex-end; width: 100%; margin-top: 18px; gap: 12px; align-items: center;">
+<div style="display: flex; justify-content: flex-end; width: 100%; margin-top: 18px; margin-bottom: 28px; gap: 12px; align-items: center;">
     <button class="proforma-action-btn btn-rojo" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
-    <button class="proforma-action-btn btn-azul" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
+    <button class="proforma-action-btn btn-rojo" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
 </div>
  
 
