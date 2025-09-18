@@ -459,7 +459,48 @@
         </div>
 <script>
 // Mostrar/ocultar la calculadora al hacer clic en el botón
-...existing code...
+document.addEventListener('DOMContentLoaded', function() {
+    var calcBtn = document.getElementById('calculator-btn');
+    if (calcBtn) {
+        calcBtn.addEventListener('click', function() {
+            var calculator = document.getElementById('calculator');
+            if (calculator.style.display === 'none' || calculator.style.display === '') {
+                calculator.style.display = 'block';
+            } else {
+                calculator.style.display = 'none';
+            }
+        });
+    }
+});
+
+// Función para inicializar productos desde Google Sheets
+const SHEET_ID = "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
+async function cargarProductosDesdeGoogleSheets() {
+    const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
+    try {
+        const response = await fetch(url);
+        const data = await response.text();
+        const productos = data.split("\n").map(line => line.split(","));
+        if (productos.length > 0) {
+            productos.forEach(function(producto) {
+                const nombreProducto = producto[0];
+                const precioProducto = producto[1] ? parseFloat(producto[1]) : null;
+                const option = document.createElement("option");
+                if (!isNaN(precioProducto)) {
+                    option.text = `${nombreProducto} - $${precioProducto.toFixed(2)}`;
+                } else {
+                    option.text = `${nombreProducto}`;
+                }
+                document.getElementById("producto").add(option);
+            });
+        }
+    } catch (error) {
+        console.error("Error cargando productos:", error);
+    }
+}
+function inicializarProductos() {
+    cargarProductosDesdeGoogleSheets();
+}
 </script>
 
     
