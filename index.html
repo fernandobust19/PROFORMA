@@ -4,8 +4,12 @@
         <meta charset="UTF-8">
         <title>Proforma de Productos UP-CONS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="favicon.png">
+    <meta name="theme-color" content="#ffffff">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
         <style>
 /* Tema NEON */
 :root {
@@ -204,6 +208,38 @@
     box-shadow: 0 1px 4px #0002, 0 0 0 1.5px #bbb;
 }
 
+    /* Estilos específicos para el footer del modal de inventario */
+    #inventory-view { position: relative; }
+    .inventory-footer {
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(250,250,250,0.95));
+        padding: 10px 6px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+        border-top: 1px solid #eee;
+    }
+
+    .inventory-action-btn {
+        min-width: 130px;
+        height: 40px;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    @media (max-width: 540px) {
+        .inventory-footer { flex-direction: column; gap: 10px; padding: 12px; }
+        .inventory-action-btn { width: 100%; min-width: unset; }
+        #inventory-view { padding-bottom: 80px; }
+    }
+
 
 
 
@@ -315,7 +351,7 @@
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;" />
                 </div>
     <div class="formulario">
-        
+
         
         
         
@@ -401,6 +437,31 @@
     <button id="agregarBtn" class="action-button btn-verde btn-small" style="margin-right: auto;" onclick="agregarProducto()">✅ Agregar producto</button>
     <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
 </div>
+    <!-- Modal de Inventario (oculto inicialmente). No se puede cerrar hasta presionar 'Guardar y Cerrar'. -->
+    <div id="inventory-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;">
+        <div id="inventory-view" style="background:#fff;width:92%;max-width:920px;max-height:88vh;overflow:auto;padding:16px;border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,0.25);margin:4vh auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <h3 style="margin:0;">Inventario de Productos</h3>
+                <div style="display:flex;gap:8px;">
+                    <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar PDF</button>
+                </div>
+            </div>
+
+            
+
+            <div id="inventory-list" style="max-height:60vh;overflow:auto;border-top:1px solid #eee;padding-top:8px;">
+                <!-- Filas de producto se insertarán aquí -->
+            </div>
+
+            <div class="inventory-footer">
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
+                    <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">🗑️ Borrar borrador</button>
+                    <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">💾 Guardar y Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
     
     
@@ -461,6 +522,386 @@ function mostrarFechaProforma() {
     document.getElementById('fechaProforma').textContent = fechaTexto;
 }
 mostrarFechaProforma();
+</script>
+<script>
+// ----- INVENTARIO: funciones para manejar la vista y exportación -----
+function openInventory() {
+    document.getElementById('inventory-modal').style.display = 'flex';
+    // cargar productos desde el select #producto si está disponible
+    loadProductsForInventory();
+    // restaurar borrador si existe
+    restoreInventoryDraft();
+    // prevenir cierre accidental de la pestaña/ventana mientras se realiza el inventario
+    window.addEventListener('beforeunload', preventUnload);
+}
+
+// closeInventory ya no permite cerrar el modal; usar saveInventoryAndClose()
+function closeInventory() {
+    console.log('El inventario no puede cerrarse sin guardar. Usa Guardar y Cerrar.');
+}
+
+function saveInventoryAndClose() {
+    // Al guardar, pedimos un nombre para el inventario y lo guardamos en el registro de inventarios guardados
+    const draft = collectInventoryData();
+    // Si no hay datos, avisar
+    const entries = Object.entries(draft).filter(([,v]) => v !== '' && v !== '0' && v !== null && v !== undefined);
+    if (entries.length === 0) return alert('No hay cantidades registradas para guardar.');
+    // mostrar modal para nombrar
+    showInventoryNameModal(async function(nombre) {
+        if (!nombre) nombre = 'inventario_' + new Date().toISOString();
+        // cargar inventarios existentes
+        const lista = getSavedInventories();
+        lista.push({ name: nombre, savedAt: new Date().toISOString(), data: draft });
+        setSavedInventories(lista);
+        // mantener compatibilidad: guardar también como inventario_final y meta
+        localStorage.setItem('inventario_final', JSON.stringify(draft));
+        const meta = { savedAt: new Date().toISOString(), storage: 'localStorage', key: 'inventario_final' };
+        localStorage.setItem('inventario_final_meta', JSON.stringify(meta));
+        // limpiar borrador temporal
+        localStorage.removeItem('inventario_draft');
+        // cerrar modal principal
+        document.getElementById('inventory-modal').style.display = 'none';
+        window.removeEventListener('beforeunload', preventUnload);
+        updateSaveInfo();
+        updateInventoryButtonState();
+        alert('Inventario guardado como "' + nombre + '".');
+    });
+}
+
+function openSavedInventory() {
+    // Mostrar una lista de inventarios guardados para seleccionar cuál abrir
+    renderSavedInventoryListModal();
+}
+
+// Gestión de múltiples inventarios guardados en localStorage bajo la clave 'inventarios_guardados'
+function getSavedInventories() {
+    try {
+        const raw = localStorage.getItem('inventarios_guardados');
+        if (!raw) return [];
+        return JSON.parse(raw);
+    } catch (e) { return []; }
+}
+
+function setSavedInventories(list) {
+    try {
+        localStorage.setItem('inventarios_guardados', JSON.stringify(list));
+    } catch (e) { console.error('No se pudo guardar inventarios:', e); }
+}
+
+function showInventoryNameModal(onSave) {
+    // crea modal simple con efecto "salto hacia al frente"
+    if (document.getElementById('modal-nombre-inventario')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-nombre-inventario';
+    overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:18px 20px;border-radius:12px;min-width:260px;max-width:90%;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-20px) scale(0.96);animation:popIn 260ms cubic-bezier(.2,.9,.3,1) forwards;';
+    box.innerHTML = `
+        <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Nombre del inventario</div>
+        <input id="input-nombre-inventario" type="text" placeholder="Ej: inventario_mayo_2025" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:14px;" />
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button id="btn-cancel-nombre-inv" style="padding:8px 12px;border-radius:8px;border:none;background:#eee;">Cancelar</button>
+            <button id="btn-save-nombre-inv" style="padding:8px 12px;border-radius:8px;border:none;background:#06d6a0;color:#fff;font-weight:700;">Guardar</button>
+        </div>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    // focus
+    const input = document.getElementById('input-nombre-inventario');
+    input.focus();
+    // handlers
+    document.getElementById('btn-cancel-nombre-inv').onclick = function() { overlay.remove(); };
+    document.getElementById('btn-save-nombre-inv').onclick = function() {
+        const val = (input.value || '').trim();
+        overlay.remove();
+        if (typeof onSave === 'function') onSave(val);
+    };
+    input.onkeydown = function(e) { if (e.key === 'Enter') { document.getElementById('btn-save-nombre-inv').click(); } };
+}
+
+function renderSavedInventoryListModal() {
+    const list = getSavedInventories();
+    // crear overlay
+    if (document.getElementById('modal-lista-inventarios')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-lista-inventarios';
+    overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:14px;border-radius:12px;min-width:320px;max-width:92%;max-height:80vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,0.25);';
+    const header = document.createElement('div'); header.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+    header.innerHTML = `<div style="font-weight:700">Inventarios guardados</div><div style="font-size:12px;color:#666">${list.length} guardado(s)</div>`;
+    box.appendChild(header);
+    if (list.length === 0) {
+        const p = document.createElement('div'); p.style.padding='12px 6px'; p.textContent = 'No hay inventarios guardados.'; box.appendChild(p);
+    } else {
+        list.slice().reverse().forEach((item, idx) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #f0f0f0;gap:6px;';
+            const info = document.createElement('div');
+            const dt = new Date(item.savedAt);
+            info.innerHTML = `<div style="font-weight:600">${item.name}</div><div style="font-size:11px;color:#666">${dt.toLocaleString()}</div>`;
+            const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+            const openBtn = document.createElement('button'); openBtn.textContent='Abrir'; openBtn.className='inventory-action-btn'; openBtn.style.background='#14b8ff;color:#fff;';
+            const delBtn = document.createElement('button'); delBtn.textContent='Eliminar'; delBtn.className='inventory-action-btn btn-rojo';
+            openBtn.onclick = function() {
+                // cargar este inventario en el modal principal
+                overlay.remove();
+                const realIndex = list.length - 1 - idx; // porque iteramos reverse
+                loadNamedInventory(realIndex);
+            };
+            delBtn.onclick = function() {
+                if (!confirm('¿Eliminar este inventario guardado?')) return;
+                const realIndex = list.length - 1 - idx;
+                const newList = getSavedInventories();
+                newList.splice(realIndex,1);
+                setSavedInventories(newList);
+                overlay.remove();
+                renderSavedInventoryListModal();
+                updateSaveInfo();
+            };
+            actions.appendChild(openBtn); actions.appendChild(delBtn);
+            row.appendChild(info); row.appendChild(actions); box.appendChild(row);
+        });
+    }
+    // footer actions
+    const footer = document.createElement('div'); footer.style.cssText='display:flex;justify-content:flex-end;margin-top:8px;gap:8px;';
+    const closeBtn = document.createElement('button'); closeBtn.textContent='Cerrar'; closeBtn.className='inventory-action-btn'; closeBtn.onclick = () => overlay.remove();
+    footer.appendChild(closeBtn); box.appendChild(footer);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+function loadNamedInventory(index) {
+    const list = getSavedInventories();
+    if (!list || !list[index]) return alert('Inventario no encontrado.');
+    const item = list[index];
+    const data = item.data || {};
+    // abrir modal principal y poblar
+    document.getElementById('inventory-modal').style.display = 'flex';
+    loadProductsForInventory();
+    setTimeout(() => {
+        const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
+        rows.forEach(r => {
+            const name = r.querySelector('div').textContent.trim();
+            if (data[name] !== undefined) r.querySelector('input').value = data[name];
+            else r.querySelector('input').value = '';
+        });
+        window.addEventListener('beforeunload', preventUnload);
+    }, 120);
+}
+
+
+function updateSaveInfo() {
+    const metaRaw = localStorage.getItem('inventario_final_meta');
+    const infoEl = document.getElementById('inventory-save-info');
+    if (!infoEl) return;
+    if (!metaRaw) {
+        infoEl.textContent = '';
+        return;
+    }
+    try {
+        const meta = JSON.parse(metaRaw);
+        const dt = new Date(meta.savedAt);
+        infoEl.textContent = `Guardado: ${dt.toLocaleString()} (almacenado localmente)`;
+    } catch (e) { infoEl.textContent = ''; }
+}
+
+// actualizar información al cargar
+window.addEventListener('DOMContentLoaded', updateSaveInfo);
+
+function preventUnload(e) {
+    e = e || window.event;
+    // Cancel the event
+    if (e) e.returnValue = 'Hay cambios sin guardar en el inventario. ¿Segur@ que quieres salir?';
+    return 'Hay cambios sin guardar en el inventario. ¿Segur@ que quieres salir?';
+}
+
+function loadProductsForInventory() {
+    const inventoryList = document.getElementById('inventory-list');
+    inventoryList.innerHTML = '';
+    const select = document.getElementById('producto');
+    if (!select) {
+        inventoryList.innerHTML = '<p>No se encontró la lista de productos.</p>';
+        return;
+    }
+    // recorrer las opciones del select y crear filas
+    Array.from(select.options).forEach((opt, idx) => {
+        if (!opt.text || opt.style.display === 'none') return; // omite ocultos
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.padding = '8px 6px';
+        row.style.borderBottom = '1px solid #f0f0f0';
+
+        const nameDiv = document.createElement('div');
+        nameDiv.style.flex = '1';
+        nameDiv.style.fontSize = '14px';
+        nameDiv.textContent = opt.text.replace(/\s*-\s*\$[0-9.,]+$/, ''); // quita el precio si existe
+
+    const qtyInput = document.createElement('input');
+    qtyInput.type = 'number';
+    qtyInput.min = '0';
+    qtyInput.value = '';
+        qtyInput.style.width = '90px';
+        qtyInput.style.marginLeft = '12px';
+        qtyInput.dataset.productName = opt.text;
+
+        // Restaurar valor desde draft si existe
+        const draftRaw = localStorage.getItem('inventario_draft');
+        if (draftRaw) {
+            try {
+                const draft = JSON.parse(draftRaw);
+                const nameKey = nameDiv.textContent.trim();
+                if (draft[nameKey] !== undefined) qtyInput.value = draft[nameKey];
+            } catch (e) { /* ignore */ }
+        }
+
+        // Guardado automático al cambiar
+        qtyInput.addEventListener('input', () => {
+            autosaveInventoryDraft();
+        });
+
+        row.appendChild(nameDiv);
+        row.appendChild(qtyInput);
+        inventoryList.appendChild(row);
+    });
+}
+
+function downloadInventoryCSV() {
+    // función removida: la exportación CSV ya no está disponible desde la UI
+}
+
+async function saveInventoryPDF() {
+    // Exportar inventario a PDF usando jsPDF. Construimos una tabla simple.
+    const data = collectInventoryData();
+    const entries = Object.entries(data);
+    if (entries.length === 0) return alert('No hay datos para exportar.');
+    // asegúrate de que jsPDF esté cargado; si no, cárgalo dinámicamente
+    if (!window.jspdf) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        // pequeña pausa
+        await new Promise(r => setTimeout(r, 120));
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 12;
+    const usableWidth = pageWidth - margin * 2;
+    const lineHeight = 8;
+    let y = 18;
+
+    doc.setFontSize(14);
+    doc.text('Inventario de Productos', margin, y);
+    y += 10;
+    doc.setFontSize(11);
+    doc.text('Fecha: ' + (new Date()).toLocaleString(), margin, y);
+    y += 10;
+
+    // encabezado tabla
+    doc.setFontSize(11);
+    doc.text('Producto', margin, y);
+    doc.text('Cantidad', margin + usableWidth - 30, y);
+    y += 6;
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, margin + usableWidth, y);
+    y += 6;
+
+    entries.forEach(([name, qty], idx) => {
+        if (y > doc.internal.pageSize.getHeight() - 20) {
+            doc.addPage();
+            y = 18;
+        }
+        // recortar nombre si es muy largo
+        const nameLines = doc.splitTextToSize(name, usableWidth - 40);
+        doc.text(nameLines, margin, y);
+        doc.text(String(qty), margin + usableWidth - 30, y);
+        y += lineHeight * nameLines.length;
+    });
+
+    doc.save('inventario.pdf');
+}
+
+// util: cargar script dinámicamente
+function loadScript(url) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+function collectInventoryData() {
+    const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
+    const out = {};
+    rows.forEach(r => {
+        const name = r.querySelector('div').textContent.trim();
+        let qty = r.querySelector('input').value;
+        if (qty === '' || qty === null || qty === undefined) qty = '0';
+        out[name] = qty;
+    });
+    return out;
+}
+
+function autosaveInventoryDraft() {
+    // guarda en localStorage un borrador con las cantidades actuales
+    const draft = collectInventoryData();
+    localStorage.setItem('inventario_draft', JSON.stringify(draft));
+}
+
+function restoreInventoryDraft() {
+    const draftRaw = localStorage.getItem('inventario_draft');
+    if (!draftRaw) return;
+    try {
+        const draft = JSON.parse(draftRaw);
+        // asignar a inputs ya creados
+        const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
+        rows.forEach(r => {
+            const name = r.querySelector('div').textContent.trim();
+            if (draft[name] !== undefined) r.querySelector('input').value = draft[name];
+        });
+    } catch (e) { /* ignore */ }
+}
+
+function pauseInventory() {
+    // simplemente cierra el modal pero mantiene el borrador en localStorage
+    document.getElementById('inventory-modal').style.display = 'none';
+    // quitar prevención de unload
+    window.removeEventListener('beforeunload', preventUnload);
+    updateInventoryButtonState();
+    alert('Inventario pausado. Puedes continuar en otro momento haciendo clic en Inventario.');
+}
+
+function clearInventoryDraft() {
+    if (!confirm('¿Eliminar el borrador actual del inventario? Esta acción no se puede deshacer.')) return;
+    localStorage.removeItem('inventario_draft');
+    localStorage.removeItem('inventario_final');
+    // limpiar inputs visibles
+    const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
+    rows.forEach(r => { const inp = r.querySelector('input'); if (inp) inp.value = ''; });
+    updateInventoryButtonState();
+    alert('Borrador eliminado.');
+}
+
+function updateInventoryButtonState() {
+    const btn = document.getElementById('open-inventory-btn');
+    const draft = localStorage.getItem('inventario_draft');
+    if (!btn) return;
+    if (draft) {
+        btn.style.background = 'linear-gradient(180deg,#ffd86b 0%,#f6c84c 100%)';
+        btn.title = 'Inventario (borrador disponible)';
+    } else {
+        btn.style.background = '';
+        btn.className = 'proforma-action-btn btn-azul';
+        btn.title = 'Inventario';
+    }
+}
+
+// actualizar estado del botón al cargar la página
+window.addEventListener('DOMContentLoaded', updateInventoryButtonState);
+
+// Nota: para guardar directamente en Google Sheets necesitarás un endpoint (Google Apps Script)
 </script>
 <script>
 // Modal animado para ingresar el nombre del archivo y guardar
@@ -971,13 +1412,24 @@ function calculateResult() {
 
 </script>
 
-<!-- Acceso a inventario (no aparece en la imagen guardada) -->
-<div class="no-imagen" style="margin: 120px auto 0 auto; text-align:center; max-width: 350px;">
-    <label style="font-weight:bold;">Acceso a inventario</label><br>
-    <input type="password" id="password" placeholder="Ingresa la contraseña">
-    <button id="accederBtn" class="action-button btn-verde" onclick="verificarPassword()">Acceder</button>
-    <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
-</div>
+<!-- Inventario actions (botones) -->
+    <div class="no-imagen" style="margin: 120px auto 0 auto; text-align:center; max-width: 520px; display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
+            <button id="open-inventory-btn" class="proforma-action-btn btn-azul" onclick="openInventory()" title="Inventario">📦 Inventario</button>
+            <button id="open-saved-inventory-btn" class="proforma-action-btn" style="background:#6c757d;color:#fff;" onclick="openSavedInventory()" title="Abrir inventario guardado">📂 Abrir guardado</button>
+        </div>
+        <div id="inventory-save-info" style="font-size:12px;color:#444;margin-top:6px;"> </div>
+    </div>
+
+<!-- Acceso a inventario (bloque separado) -->
+    <div style="margin:8px auto 0 auto; text-align:center; max-width:520px; display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <label style="font-weight:bold;">Acceso a inventario</label>
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
+            <input type="password" id="password" placeholder="Ingresa la contraseña">
+            <button id="accederBtn" class="action-button btn-verde" onclick="verificarPassword()">Acceder</button>
+        </div>
+        <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
+    </div>
 
 <script>
     function verificarPassword() {
