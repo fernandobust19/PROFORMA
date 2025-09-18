@@ -346,6 +346,11 @@
         background-color: #1e7e34; /* Un tono más oscuro al presionar */
     }
 
+    /* Estilos para el botón de acceso a inventario */
+    #accederBtn {
+        transition: background-color 0.3s ease, transform 0.1s ease;
+    }
+
 
     </style>
 </head>
@@ -640,6 +645,9 @@ document.addEventListener('DOMContentLoaded', function() {
         vendedorDisplay.innerText = vendedor;
 
         const proforma = document.getElementById("proforma");
+        // Ocultar elementos no-imagen temporalmente
+        const ocultar = document.querySelectorAll('.no-imagen');
+        ocultar.forEach(el => el.style.display = 'none');
         // Esperar un pequeño tiempo para que el DOM se actualice
         setTimeout(() => {
                 html2canvas(proforma, {
@@ -667,6 +675,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 // Limpiar el nombre del vendedor después de guardar la imagen
                 vendedorDisplay.innerText = "";
+                // Volver a mostrar los elementos no-imagen
+                ocultar.forEach(el => el.style.display = 'block');
             });
         }, 100);
     }
@@ -1160,6 +1170,54 @@ function toggleCalculator() {
     }
 }
 
+</script>
+
+<!-- Acceso a inventario (no aparece en la imagen guardada) -->
+<div class="no-imagen" style="margin: 40px auto 0 auto; text-align:center; max-width: 350px;">
+    <label style="font-weight:bold;">Acceso a inventario</label><br>
+    <input type="password" id="password" placeholder="Ingresa la contraseña">
+    <button id="accederBtn" class="action-button btn-verde" onclick="verificarPassword()">Acceder</button>
+    <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
+</div>
+
+<script>
+    function verificarPassword() {
+        const password = document.getElementById("password").value;
+        const passwordCorrecta = "5555";  // Contraseña correcta
+        const boton = document.getElementById("accederBtn");
+        const mensaje = document.getElementById("mensaje");
+
+        // Restablece el estilo del botón
+        boton.style.backgroundColor = "";
+        boton.style.transform = "";
+        mensaje.style.display = "none";
+
+        if (password === passwordCorrecta) {
+            // Efecto de botón presionado (cambio de color y hundimiento)
+            boton.style.backgroundColor = "#28a745"; // Verde
+            boton.style.transform = "translateY(2px)";
+            boton.innerHTML = "Accediendo...";
+
+            // Redirige a la hoja de cálculo en una nueva pestaña después de un pequeño retraso
+            setTimeout(() => {
+                window.open("https://docs.google.com/spreadsheets/d/1lm9rsOQw57roxDV4RKGORSEzWRmGa6je5AR_G8R7vHs/edit?usp=drivesdk", "_blank");
+                boton.innerHTML = "Acceder";  // Restablece el texto del botón
+                boton.style.backgroundColor = "";
+                boton.style.transform = "";
+            }, 500);
+        } else {
+            // Si la contraseña es incorrecta, muestra el mensaje de error y un efecto de "hundimiento"
+            boton.style.backgroundColor = "#dc3545"; // Rojo
+            boton.style.transform = "translateY(2px)";
+            mensaje.style.display = "block";  // Muestra el mensaje de error
+
+            // Restablece el efecto de hundimiento después de un breve período
+            setTimeout(() => {
+                boton.style.transform = "";
+                boton.style.backgroundColor = "";
+            }, 400);
+        }
+    }
 </script>
 
 
