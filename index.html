@@ -7,11 +7,6 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
         <style>
-        .zoom-container {
-            transform: scale(0.60);
-            transform-origin: top center;
-            width: 166.66%;
-        }
 /* Tema NEON */
 :root {
     /* Tema NEON CLARO */
@@ -212,40 +207,15 @@
 
 
 
-        
-        
-        
-        html, body {
-   height: 150%;
-   margin: 0;
-   padding: 0;
-   overflow-y: auto !important;
-   -webkit-overflow-scrolling: touch; /* Esto hace que el desplazamiento sea suave en dispositivos móviles */
-}
-
-.proforma-container { /* Reemplaza '.proforma-container' con el id o clase de tu contenedor principal */
-   max-height: 100vh; /* Limita la altura máxima al 100% de la altura de la ventana */
-   overflow-y: auto;  /* Habilita el scroll vertical */
-}
-
-#contenido {  /* Este es un ejemplo de contenedor. Reemplaza con tu contenedor real */
-   position: relative;
-   overflow-x: hidden;  /* Evita el scroll horizontal */
-}
-
-        
-        
-        
-        
-        
-        
-        
     body {
         font-family: 'Arial', sans-serif;
         background-color: #f4f4f4;
         margin: 0;
         padding: 20px;
         font-size: 12px;
+        height: 150%;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
     }
     .formulario {
         display: flex;
@@ -291,6 +261,12 @@
         border: 1px solid #ddd;
         border-radius: 5px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        max-height: 100vh;
+        overflow-y: auto;
+    }
+    #contenido {
+        position: relative;
+        overflow-x: hidden;
     }
     .item-container {
         display: flex;
@@ -315,35 +291,13 @@
     .action-buttons-container {
         display: flex;
         justify-content: space-between; /* Para que estén uno al lado del otro */
-        width: 100%; /* O el ancho que desees para los botones */
+        width: 100%;
         gap: 10px; /* Espacio entre los botones */
         margin-top: 10px; /* Margen superior para separarlos de otros elementos */
     }
 
-    .action-button {
+    .action-button { /* Estilo base ya definido en .proforma-action-btn, .action-button */
         flex: 1; /* Para que ambos botones ocupen el mismo espacio */
-        font-size: 13px;
-        padding: 10px 5px; /* Ajusta el padding para hacerlos más rectangulares/cuadrados */
-        border-radius: 5px; /* Bordes ligeramente redondeados */
-        transition: background-color 0.2s, transform 0.1s;
-    }
-
-    .action-button:active {
-        transform: scale(0.95); /* Efecto de aplastamiento */
-    }
-
-    #agregarBtn {
-        background-color: #007bff; /* Color original o un verde si prefieres para agregar */
-    }
-    #agregarBtn:active {
-        background-color: #0056b3; /* Un tono más oscuro al presionar */
-    }
-
-    #guardarImagenBtn {
-        background-color: #28a745; /* Verde para guardar imagen */
-    }
-    #guardarImagenBtn:active {
-        background-color: #1e7e34; /* Un tono más oscuro al presionar */
     }
 
     /* Estilos para el botón de acceso a inventario */
@@ -351,12 +305,8 @@
         transition: background-color 0.3s ease, transform 0.1s ease;
     }
 
-
     </style>
 </head>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
 
 <body onload="inicializarProductos();">
 
@@ -702,12 +652,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <script>
     // ID de la hoja de cálculo de Google Sheets
-    const SHEET_ID =
-    
-    
-    
-    
-     "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
+    const SHEET_ID = "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
 
     // Función para cargar productos desde Google Sheets
     async function cargarProductosDesdeGoogleSheets() {
@@ -915,56 +860,6 @@ document.addEventListener('DOMContentLoaded', function() {
 }   
 
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-function guardarProforma() {
-    const tablaHTML = document.querySelector("table").outerHTML;
-    const subtotal = document.getElementById("subtotal").innerText;
-    const iva = document.getElementById("iva").innerText;
-    const total = document.getElementById("total").innerText;
-
-    const contenido = `
-        <html>
-        <body>
-            ${tablaHTML}
-            <h2 id="subtotal" style="font-size: 9px;">${subtotal}</h2>
-            <h2 id="iva" style="font-size: 8px;">${iva}</h2>
-            <h2 id="total" style="font-size: 15px;">${total}</h2>
-        </body>
-        </html>
-    `;
-
-    const blob = new Blob([contenido], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "proforma.html";
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-
-
-
-
-
-    
-    
-    
-    
-    
-    
-
-    
-
-
 function guardarPagina() {
     var nombrePagina = document.getElementById("nombrePagina").value || "proforma_guardada";
     var nombreCliente = document.getElementById("nombreCliente").value || "";
@@ -991,83 +886,6 @@ function guardarPagina() {
     a.click();
     URL.revokeObjectURL(a.href);
 }
-
-
-
-
-
-
-
-
-    function guardarComoJPG() {
-        html2canvas(document.getElementById("proforma")).then(function(canvas) {
-            var link = document.createElement('a');
-            link.download = 'proforma.jpg';
-            link.href = canvas.toDataURL("image/jpeg", 1.0);
-            link.click();
-        });
-
-
-        html2canvas(document.getElementById("logo-container")).then(function(canvas) {
-            html2canvas(document.getElementById("proforma")).then(function(proformaCanvas) {
-                var combinedCanvas = document.createElement("canvas");
-                combinedCanvas.width = Math.max(proformaCanvas.width, canvas.width);
-                combinedCanvas.height = proformaCanvas.height + canvas.height;
-                var context = combinedCanvas.getContext("2d");
-
-                context.drawImage(proformaCanvas, 0, 0);
-                context.drawImage(canvas, 0, proformaCanvas.height);
-
-                var link = document.createElement('a');
-                link.download = 'proforma_con_logo.jpg';
-                link.href = combinedCanvas.toDataURL("image/jpeg", 1.0);
-                link.click();
-            });
-        });
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    function cargarProforma(event) {
-    const archivo = event.target.files[0];
-    if (!archivo) return;
-
-    const lector = new FileReader();
-    lector.onload = function(e) {
-        const contenido = e.target.result;
-        const doc = new DOMParser().parseFromString(contenido, "text/html");
-
-        // Restaurar tabla
-        const tablaHTML = doc.querySelector("table");
-        if (tablaHTML) {
-            document.querySelector("table").innerHTML = tablaHTML.innerHTML;
-        }
-
-        // Restaurar totales
-        const subtotal = doc.getElementById("subtotal");
-        const iva = doc.getElementById("iva");
-        const total = doc.getElementById("total");
-
-        if (subtotal) document.getElementById("subtotal").innerText = subtotal.innerText;
-        if (iva) document.getElementById("iva").innerText = iva.innerText;
-        if (total) document.getElementById("total").innerText = total.innerText;
-    };
-
-    lector.readAsText(archivo);
-}
-
-
-
-
-
-
-
 
 
     function cargarPagina() {
@@ -1118,11 +936,6 @@ function guardarPagina() {
             };
         });
     }
-
-    // función mostrarFechaActual eliminada para evitar duplicado de fecha
-    
-    
-    
    
 
 function appendNumber(number) {
@@ -1153,15 +966,6 @@ function calculateResult() {
         output.value = eval(expression);
     } catch (error) {
         output.value = "Error";
-    }
-}
-
-function toggleCalculator() {
-    var calculator = document.getElementById("calculator");
-    if (calculator.style.display === "none" || calculator.style.display === "") {
-        calculator.style.display = "block";
-    } else {
-        calculator.style.display = "none";
     }
 }
 
