@@ -1102,62 +1102,40 @@ document.addEventListener('DOMContentLoaded', function() {
         // Escribir el nombre del vendedor en la proforma
         vendedorDisplay.innerText = vendedor;
 
-        // Ocultar elementos no-imagen temporalmente
+        // Elementos a ocultar y el contenedor de la proforma
         const ocultar = document.querySelectorAll('.no-imagen');
-        ocultar.forEach(el => el.style.display = 'none');
-        // Abrir una ventana en el mismo evento de usuario para evitar bloqueos en iOS
         const proforma = document.getElementById("proforma");
-        const esIphone = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        let nuevaVentana = null;
-        try {
-            // abrir inmediatamente (síncrono) para que no sea bloqueada
-            nuevaVentana = window.open('', '_blank');
-            if (nuevaVentana) {
-                // indicador mientras se prepara la imagen
-                nuevaVentana.document.write('<html><head><title>Preparando imagen...</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial,Helvetica,sans-serif;color:#444">Generando imagen, por favor espera...</body></html>');
-            }
-        } catch (e) { nuevaVentana = null; }
+        
+        // Guardar estilos originales para restaurarlos después
+        const originalProformaStyle = proforma.style.cssText;
+
+        // Ocultar elementos que no deben salir en la imagen
+        ocultar.forEach(el => el.style.display = 'none');
+        
+        // Forzar un ancho de "celular" para la captura
+        proforma.style.width = '414px';
+        proforma.style.maxWidth = '414px';
 
         // Esperar un pequeño tiempo para que el DOM se actualice y luego capturar
         setTimeout(() => {
             html2canvas(proforma, {
-                scale: 2,
+                scale: 2.5, // Aumentar la escala para mejor calidad en la imagen final
                 useCORS: true,
                 backgroundColor: "#ffffff"
             }).then((canvas) => {
                 const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-                // Si abrimos una ventana antes, ponemos la imagen allí (mejor para iOS)
-                if (nuevaVentana && !nuevaVentana.closed) {
-                    try {
-                        const infoHtml = esIphone ? '<div style="padding:10px;font-size:14px;color:#333;">Mantén pulsada la imagen y selecciona "Guardar" para descargarla.</div>' : '';
-                        nuevaVentana.document.open();
-                        nuevaVentana.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guardar Imagen</title></head><body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#fff;color:#111;">${infoHtml}<img src="${dataUrl}" style="width:100%;height:auto;max-width:100vw;display:block;" /></body></html>`);
-                        nuevaVentana.document.close();
-                    } catch (e) {
-                        // si no podemos escribir en la ventana, caer al enlace de descarga
-                        const enlace = document.createElement("a");
-                        enlace.href = dataUrl;
-                        enlace.download = "proforma.jpg";
-                        enlace.click();
-                        if (nuevaVentana && !nuevaVentana.closed) nuevaVentana.close();
-                    }
-                } else {
-                    // Fallback: forzar descarga (funciona en la mayoría de navegadores de escritorio)
-                    const enlace = document.createElement("a");
-                    enlace.href = dataUrl;
-                    enlace.download = "proforma.jpg";
-                    enlace.click();
-                }
+                
+                // Crear un enlace para forzar la descarga de la imagen
+                const enlace = document.createElement("a");
+                enlace.href = dataUrl;
+                enlace.download = "proforma.jpg";
+                enlace.click();
 
-                // Limpiar el nombre del vendedor después de guardar la imagen
+                // Limpiar y restaurar la vista original
                 vendedorDisplay.innerText = "";
-                // Volver a mostrar los elementos no-imagen
-                ocultar.forEach(el => el.style.display = 'block');
+                ocultar.forEach(el => el.style.display = ''); // Usar '' para restaurar el display por defecto
+                proforma.style.cssText = originalProformaStyle; // Restaurar estilos originales
             }).catch(err => {
-                // Error al generar canvas: cerrar ventana indicadora si existe y mostrar error
-                if (nuevaVentana && !nuevaVentana.closed) {
-                    try { nuevaVentana.document.body.innerHTML = '<div style="padding:20px;color:#900;">Error generando imagen.</div>'; } catch(e){}
-                }
                 console.error('Error html2canvas:', err);
                 alert('No fue posible generar la imagen en este dispositivo.');
             });
