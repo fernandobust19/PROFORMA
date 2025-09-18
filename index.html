@@ -867,6 +867,15 @@ async function saveInventoryPDF() {
             localStorage.removeItem('inventario_draft');
         } catch (e) { console.error('No se pudo guardar inventario tras exportar PDF', e); }
 
+        // Después de guardar, abrir WhatsApp para enviar el documento
+        setTimeout(() => {
+            const numeroWhatsapp = "593983801298"; // Número de Ecuador (sin el 0 inicial)
+            const mensaje = `Hola, te comparto el inventario: "${nombreArchivo}".\n\nPara enviarlo, toca el ícono del clip (📎) en WhatsApp, selecciona 'Documento' y busca el archivo PDF que acabas de descargar.`;
+            const urlWhatsapp = `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(mensaje)}`;
+            
+            window.open(urlWhatsapp, '_blank').focus();
+        }, 500); // Pequeña pausa para asegurar que la descarga inicie
+
         // Cerrar modal y volver a la vista principal
         document.getElementById('inventory-modal').style.display = 'none';
         window.removeEventListener('beforeunload', preventUnload);
