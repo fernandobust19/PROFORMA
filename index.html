@@ -772,53 +772,97 @@ function downloadInventoryCSV() {
 }
 
 async function saveInventoryPDF() {
-    // Exportar inventario a PDF usando jsPDF. Construimos una tabla simple.
+    // Cuando el usuario pide exportar PDF, pedimos un nombre y guardamos igual que "Guardar y Cerrar".
     const data = collectInventoryData();
     const entries = Object.entries(data);
     if (entries.length === 0) return alert('No hay datos para exportar.');
-    // asegúrate de que jsPDF esté cargado; si no, cárgalo dinámicamente
-    if (!window.jspdf) {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-        // pequeña pausa
-        await new Promise(r => setTimeout(r, 120));
-    }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 12;
-    const usableWidth = pageWidth - margin * 2;
-    const lineHeight = 8;
-    let y = 18;
 
-    doc.setFontSize(14);
-    doc.text('Inventario de Productos', margin, y);
-    y += 10;
-    doc.setFontSize(11);
-    doc.text('Fecha: ' + (new Date()).toLocaleString(), margin, y);
-    y += 10;
+    // pedir nombre mediante el modal existente
+    showInventoryNameModal(async function(nombreArchivo) {
+        if (!nombreArchivo) nombreArchivo = 'inventario_' + new Date().toISOString().replace(/[:.]/g, '-');
 
-    // encabezado tabla
-    doc.setFontSize(11);
-    doc.text('Producto', margin, y);
-    doc.text('Cantidad', margin + usableWidth - 30, y);
-    y += 6;
-    doc.setLineWidth(0.3);
-    doc.line(margin, y, margin + usableWidth, y);
-    y += 6;
-
-    entries.forEach(([name, qty], idx) => {
-        if (y > doc.internal.pageSize.getHeight() - 20) {
-            doc.addPage();
-            y = 18;
+        // cargar jsPDF si falta
+        if (!window.jspdf) {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+            await new Promise(r => setTimeout(r, 100));
         }
-        // recortar nombre si es muy largo
-        const nameLines = doc.splitTextToSize(name, usableWidth - 40);
-        doc.text(nameLines, margin, y);
-        doc.text(String(qty), margin + usableWidth - 30, y);
-        y += lineHeight * nameLines.length;
-    });
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 12;
+        const usableWidth = pageWidth - margin * 2;
+        const colQtyWidth = 30; // mm for quantity column
+        const colNameWidth = usableWidth - colQtyWidth - 6; // small gap
+        const lineHeight = 8;
+        let y = 18;
 
-    doc.save('inventario.pdf');
+        doc.setFontSize(14);
+        doc.text('Inventario de Productos', margin, y);
+        y += 8;
+        doc.setFontSize(11);
+        doc.text('Fecha: ' + (new Date()).toLocaleString(), margin, y);
+        y += 10;
+
+        // Dibujar encabezado de tabla con líneas
+        doc.setFontSize(11);
+        doc.setFillColor(240,240,240);
+        // header background
+        doc.rect(margin, y, usableWidth, lineHeight, 'F');
+        doc.setTextColor(20,20,20);
+        doc.text('Producto', margin + 3, y + 6);
+        doc.text('Cantidad', margin + usableWidth - colQtyWidth + 6, y + 6);
+        y += lineHeight;
+        doc.setDrawColor(200);
+        doc.setLineWidth(0.4);
+        doc.line(margin, y, margin + usableWidth, y);
+
+        // filas
+        entries.forEach(([name, qty], idx) => {
+            // saltar si no hay registro (evitar filas completamente vacías)
+            if ((qty === '' || qty === '0' || qty === null || qty === undefined) && String(qty).trim() === '') return;
+
+            const nameLines = doc.splitTextToSize(name, colNameWidth - 6);
+            const rowHeight = Math.max(lineHeight, nameLines.length * lineHeight);
+            if (y + rowHeight > pageHeight - 18) {
+                doc.addPage();
+                y = 18;
+            }
+            // product name
+            doc.text(nameLines, margin + 3, y + 6);
+            // quantity (right aligned in its box)
+            const qtyX = margin + usableWidth - colQtyWidth + 6;
+            doc.text(String(qty), qtyX, y + 6);
+            // draw horizontal separator line
+            y += rowHeight;
+            doc.setDrawColor(230);
+            doc.line(margin, y, margin + usableWidth, y);
+        });
+
+        // Guardar el PDF con el nombre dado
+        const safeName = nombreArchivo.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+        doc.save(safeName + '.pdf');
+
+        // Guardar el inventario en el registro con el mismo nombre
+        try {
+            const lista = getSavedInventories();
+            lista.push({ name: nombreArchivo, savedAt: new Date().toISOString(), data: data });
+            setSavedInventories(lista);
+            // compatibilidad
+            localStorage.setItem('inventario_final', JSON.stringify(data));
+            const meta = { savedAt: new Date().toISOString(), storage: 'localStorage', key: 'inventario_final' };
+            localStorage.setItem('inventario_final_meta', JSON.stringify(meta));
+            localStorage.removeItem('inventario_draft');
+        } catch (e) { console.error('No se pudo guardar inventario tras exportar PDF', e); }
+
+        // Cerrar modal y volver a la vista principal
+        document.getElementById('inventory-modal').style.display = 'none';
+        window.removeEventListener('beforeunload', preventUnload);
+        updateSaveInfo();
+        updateInventoryButtonState();
+        // Scroll suave al principio/área principal
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
 }
 
 // util: cargar script dinámicamente
