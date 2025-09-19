@@ -240,6 +240,15 @@
         #inventory-view { padding-bottom: 80px; }
     }
 
+    #main-title {
+        cursor: pointer;
+        user-select: none; /* Evita que el texto se seleccione al hacer clic */
+        transition: text-shadow 0.2s ease;
+        display: inline-block; /* Para que el hover no ocupe toda la línea */
+    }
+    #main-title:hover {
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.5);
+    }
 
 
 
@@ -370,7 +379,7 @@
 <body onload="inicializarProductos();">
 
                 <div style="position:relative;min-height:54px;margin-bottom:8px;">
-                    <h1 style="margin:0;font-size:1.7rem;font-weight:bold;">UP-CONS IMPORTADOR</h1>
+                    <h1 id="main-title" style="margin:0;font-size:1.7rem;font-weight:bold;line-height:1.1;">UP-CONS<br>IMPORTADOR</h1>
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;" />
                 </div>
     <div class="formulario">
@@ -509,7 +518,7 @@
     <div class="proforma-container panel-translucido" id="proforma">
         
         <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
-            <img src="logo.jpg" alt="Up-cons logo" style="height:48px;vertical-align:middle;display:inline-block;">
+            <img src="logo.png" alt="Up-cons logo" style="height:60px;vertical-align:middle;display:inline-block;">
         </div>
     <div style="font-size:9px; color:#111;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
     Telf: 0983801298 - 0995986366</div>
@@ -1166,6 +1175,42 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 </script>
 
+<script>
+    // Lógica para cambiar el fondo de la página
+    document.addEventListener('DOMContentLoaded', function() {
+        const titleElement = document.getElementById('main-title');
+        const body = document.body;
+        
+        const backgrounds = [
+            'fondo1.png',
+            'fondo2.png',
+            'fondo3.png',
+            'fondo4.png'
+        ];
+        
+        // Obtener el índice guardado, o usar 0 por defecto
+        let currentBackgroundIndex = parseInt(localStorage.getItem('backgroundIndex')) || 0;
+
+        // Función para aplicar el fondo
+        function applyBackground() {
+            // Asegurarse de que el índice sea válido
+            if (currentBackgroundIndex < 0 || currentBackgroundIndex >= backgrounds.length) {
+                currentBackgroundIndex = 0;
+            }
+            body.style.backgroundImage = `url('${backgrounds[currentBackgroundIndex]}')`;
+            localStorage.setItem('backgroundIndex', currentBackgroundIndex); // Guardar la elección
+        }
+
+        // Aplicar el fondo inicial al cargar la página
+        applyBackground();
+
+        // Cambiar al siguiente fondo al hacer clic
+        titleElement.addEventListener('click', function() {
+            currentBackgroundIndex = (currentBackgroundIndex + 1) % backgrounds.length; // Avanza y cicla
+            applyBackground();
+        });
+    });
+</script>
 
 
 
