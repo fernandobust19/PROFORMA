@@ -245,13 +245,27 @@
 
     body {
         font-family: 'Arial', sans-serif;
-        background-color: #f4f4f4;
+        background-image: url('fondo1.png'); /* Asegúrate de que la ruta a 'fondo1.png' sea correcta */
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed; /* Fija el fondo para que no se mueva con el scroll */
+        background-color: #f4f4f4; /* Color de respaldo si la imagen no carga */
         margin: 0;
         padding: 20px;
         font-size: 12px;
         height: 150%;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch;
+    }
+    .panel-translucido {
+        background: rgba(255, 255, 255, 0.85); /* Fondo blanco con 85% de opacidad */
+        backdrop-filter: blur(8px); /* Efecto "vidrio esmerilado" */
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 12px;
+        padding: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
     }
     .formulario {
         display: flex;
@@ -292,13 +306,10 @@
         color: white;
     }
     .proforma-container {
-        background: white;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        /* Usamos el nuevo estilo de panel, pero mantenemos el overflow */
         max-height: 100vh;
         overflow-y: auto;
+        /* El resto de estilos (fondo, padding, etc.) vienen de .panel-translucido */
     }
     #contenido {
         position: relative;
@@ -427,7 +438,7 @@
             
             
         <div class="item-container">
-    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 260px; font-size: 12px;">
+    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 180px; font-size: 12px;">
 </div>
 
 <div class="item-container">PRECIO ➡️
@@ -495,7 +506,7 @@
 
 
 
-    <div class="proforma-container" id="proforma">
+    <div class="proforma-container panel-translucido" id="proforma">
         
         <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
             <img src="logo.jpg" alt="Up-cons logo" style="height:48px;vertical-align:middle;display:inline-block;">
@@ -1124,6 +1135,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Forzar un ancho de "celular" para la captura
         proforma.style.width = '414px';
         proforma.style.maxWidth = '414px';
+        // Aplicar fondo blanco sólido SÓLO para la captura de imagen
+        proforma.style.background = 'white';
+        proforma.style.backdropFilter = 'none';
 
         // Esperar un pequeño tiempo para que el DOM se actualice y luego capturar
         setTimeout(() => {
