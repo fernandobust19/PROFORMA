@@ -1029,14 +1029,33 @@ function guardarPaginaPersonalizadaDesdeModal() {
     var nombrePagina = (input.value || '').trim() || 'proforma_guardada';
     var nombreCliente = document.getElementById('nombreCliente').value || "";
     var nombreVendedor = document.getElementById('nombreVendedorDisplay').innerText || "";
-    let htmlClonado = document.documentElement.outerHTML;
+
+    // Clona el documento y elimina el modal ANTES de guardar
+    let docClone = document.documentElement.cloneNode(true);
+
+    // Elimina el modal de nombre de archivo si existe en el clon
+    let modalClone = docClone.querySelector('#modal-nombre-archivo');
+    if (modalClone) modalClone.remove();
+
+    // Elimina cualquier overlay de fondo del modal si existe en el clon
+    let overlays = docClone.querySelectorAll('[style*="background:rgba(0,0,0"]');
+    overlays.forEach(function(overlay) {
+        if (overlay.id !== "modal-nombre-inventario" && overlay.id !== "modal-lista-inventarios") {
+            // Solo elimina overlays relacionados al modal de guardar proforma
+            overlay.remove();
+        }
+    });
+
+    // Actualiza los campos dinámicos en el clon
+    let htmlClonado = docClone.outerHTML;
     htmlClonado = htmlClonado.replace(
-        /<input type=\"text\" id=\"nombreCliente\"[^>]*>/,
+        /<input type="text" id="nombreCliente"[^>]*>/,
         `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${nombreCliente}">`
     );
-    htmlClonado = htmlClonado.replace(/<span id=\"nombreVendedorDisplay\"[^>]*>.*<\/span>/,
+    htmlClonado = htmlClonado.replace(/<span id="nombreVendedorDisplay"[^>]*>.*<\/span>/,
         `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
     );
+
     const blob = new Blob([htmlClonado], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1457,25 +1476,35 @@ function guardarPagina() {
 
 
     function cargarPagina() {
+        // Elimina cualquier modal de guardar si existe ANTES de abrir el selector
+        var modal = document.getElementById('modal-nombre-archivo');
+        if (modal) modal.remove();
+
         var fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = '.html';
-        fileInput.onchange = function(event) {
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        fileInput.addEventListener('change', function(event) {
             var file = event.target.files[0];
             if (!file) {
                 alert("Por favor, seleccione un archivo.");
+                document.body.removeChild(fileInput);
                 return;
             }
 
             var reader = new FileReader();
             reader.onload = function(event) {
-                var proformaData = event.target.result;
-                document.documentElement.innerHTML = proformaData;
-                establecerEventos(); // Llamada a la función para establecer eventos después de cargar
-                calcularTotal();
+                // Abrir el HTML en una nueva pestaña para evitar conflictos de scripts y modales
+                var newWindow = window.open();
+                newWindow.document.write(event.target.result);
+                newWindow.document.close();
             };
             reader.readAsText(file);
-        };
+            document.body.removeChild(fileInput);
+        });
+
         fileInput.click();
     }
 
