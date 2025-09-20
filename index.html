@@ -289,7 +289,7 @@
         margin-bottom: 8px;
         border: 1px solid #ddd;
         border-radius: 5px;
-        font-size: 12px;
+        font-size: 16px; /* Evita el zoom automático en iOS al enfocar un input */
     }
     button {
         background-color: #007bff;
@@ -438,14 +438,14 @@
                                 <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()">
                                 <select id="producto" onchange="copiarNombreYPrecio()"></select>
                                 <div class="item-container">
-                                    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 180px; font-size: 12px;">
+                                    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 180px; font-size: 16px;">
                                 </div>
                                 <div class="item-container">PRECIO ➡️
-                                    <input type="number" id="precioProducto" placeholder="Precio del Producto" style="width: 100px; font-size: 12px;">
+                                    <input type="number" id="precioProducto" placeholder="Precio del Producto" style="width: 100px; font-size: 16px;">
                                 </div>
                                 <div style="display: flex; align-items: center;">
                                     <label for="cantidad" style="margin-right: 5px;">CANTIDAD ➡️</label>
-                                    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 12px;">
+                                    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 16px;">
                                 </div>
                             </div>
                             <div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
@@ -465,7 +465,7 @@
                                 <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
                                 <div>
                                     <label for="nombreCliente" style="font-size:11px;">Cliente:</label>
-                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 120px; font-size:11px; padding:3px 6px;">
+                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 120px; font-size:16px; padding:3px 6px;">
                                 </div>
                                 <table>
                                     <tr>
