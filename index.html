@@ -1377,12 +1377,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
             calcularTotal();
 
+            // Guardar la selección actual del producto antes de limpiar
+            const selectProducto = document.getElementById("producto");
+            const valorSeleccionado = selectProducto.value;
+
             // Limpiar campos después de agregar
-            document.getElementById("buscador").value = "";
             document.getElementById("nombreProducto").value = "";
             document.getElementById("precioProducto").value = "";
             document.getElementById("cantidad").value = "1";
-            buscarProducto(); // Opcional: restablecer la lista de productos
+            
+            // Restablecer la lista de productos y mantener la selección anterior
+            buscarProducto();
+            selectProducto.value = valorSeleccionado;
         } else {
             alert("Por favor, ingrese un nombre y un precio válido.");
         }
