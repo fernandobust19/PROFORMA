@@ -1494,58 +1494,7 @@ function guardarPagina() {
     box.style.cssText = 'background:#fff;padding:18px 20px 14px 20px;border-radius:14px;min-width:260px;max-width:96vw;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-24px) scale(0.96);animation:popIn 320ms cubic-bezier(.2,1.2,.3,1) forwards;';
     box.innerHTML = `<div style=\"font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;\">Proformas guardadas</div>`;
     // Soporte experimental File System Access API
-    if (window.showDirectoryPicker) {
-        const dirBtn = document.createElement('button');
-        dirBtn.textContent = 'Seleccionar carpeta de proformas (experimental)';
-        dirBtn.className = 'inventory-action-btn';
-        dirBtn.style.background = '#007bff';
-        dirBtn.style.color = '#fff';
-        dirBtn.style.marginBottom = '12px';
-        dirBtn.onclick = async function() {
-            try {
-                const dirHandle = await window.showDirectoryPicker();
-                box.innerHTML = `<div style=\"font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;\">Proformas en carpeta seleccionada</div>`;
-                let found = false;
-                for await (const entry of dirHandle.values()) {
-                    if (entry.kind === 'file' && entry.name.endsWith('.html')) {
-                        found = true;
-                        const file = await entry.getFile();
-                        const row = document.createElement('div');
-                        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;gap:6px;';
-                        const info = document.createElement('div');
-                        info.innerHTML = `<div style=\'font-weight:600\'>${entry.name}</div><div style=\'font-size:11px;color:#666\'>${new Date(file.lastModified).toLocaleString()}</div>`;
-                        const openBtn = document.createElement('button');
-                        openBtn.textContent = 'Abrir';
-                        openBtn.className = 'inventory-action-btn';
-                        openBtn.style.background = '#14b8ff';
-                        openBtn.style.color = '#fff';
-                        openBtn.onclick = async function() {
-                            const text = await file.text();
-                            overlay.remove();
-                            cargarProformaEnPagina(text);
-                        };
-                        row.appendChild(info); row.appendChild(openBtn); box.appendChild(row);
-                    }
-                }
-                if (!found) {
-                    box.innerHTML += '<div style="padding:14px 6px;color:#888;">No se encontraron archivos .html en la carpeta seleccionada.</div>';
-                }
-                // Botón cerrar
-                const footer = document.createElement('div');
-                footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;gap:8px;';
-                const closeBtn = document.createElement('button');
-                closeBtn.textContent = 'Cerrar';
-                closeBtn.className = 'inventory-action-btn';
-                closeBtn.onclick = () => overlay.remove();
-                footer.appendChild(closeBtn); box.appendChild(footer);
-            } catch(e) {
-                alert('No se pudo acceder a la carpeta.');
-            }
-        };
-        box.appendChild(dirBtn);
-    } else {
-        box.innerHTML += '<div style="padding:10px;color:#888;font-size:13px;">Tu navegador no permite acceso directo a carpetas. Usa Chrome/Edge en PC para esta función.</div>';
-    }
+    // Eliminado el botón experimental de seleccionar carpeta
     // Listado localStorage (siempre disponible)
     let proformas = [];
     try {
@@ -1555,7 +1504,8 @@ function guardarPagina() {
     if (proformas.length === 0) {
         box.innerHTML += '<div style="padding:14px 6px;color:#888;">No hay proformas guardadas.<br>Guarda una proforma primero.</div>';
     } else {
-        proformas.slice().reverse().forEach((item, idx) => {
+        proformas.slice().reverse().forEach((item, idx, arr) => {
+            // El índice real en el array original (sin invertir)
             const realIdx = proformas.length - 1 - idx;
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;gap:6px;';
@@ -1583,8 +1533,12 @@ function guardarPagina() {
                     proformasActuales = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
                 } catch(e) { proformasActuales = []; }
                 if (!Array.isArray(proformasActuales)) proformasActuales = [];
-                proformasActuales.splice(realIdx, 1);
-                localStorage.setItem('proformas_guardadas', JSON.stringify(proformasActuales));
+                // Buscar por nombre y fecha para evitar errores de índice
+                const idxEliminar = proformasActuales.findIndex(p => p && p.name === item.name && p.savedAt === item.savedAt);
+                if (idxEliminar !== -1 && proformasActuales[idxEliminar]) {
+                    proformasActuales.splice(idxEliminar, 1);
+                    localStorage.setItem('proformas_guardadas', JSON.stringify(proformasActuales));
+                }
                 overlay.remove();
                 cargarPagina();
             };
