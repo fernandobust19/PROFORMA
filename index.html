@@ -33,7 +33,7 @@
 #calculator-btn {
     position: fixed;
     top: 20px;
-    left: 200px; /* Más a la izquierda */
+    left: 230px; /* Más a la izquierda */
     width: 80px;  /* Más grande */
     height: 80px; /* Más grande */
     border-radius: 10px;
@@ -1500,6 +1500,16 @@ function guardarPagina() {
                 var newWindow = window.open();
                 newWindow.document.write(event.target.result);
                 newWindow.document.close();
+
+                // Espera a que el nuevo documento esté listo y ejecuta los eventos
+                newWindow.onload = function() {
+                    if (typeof newWindow.establecerEventos === "function") {
+                        newWindow.establecerEventos();
+                    }
+                    if (typeof newWindow.calcularTotal === "function") {
+                        newWindow.calcularTotal();
+                    }
+                };
             };
             reader.readAsText(file);
             document.body.removeChild(fileInput);
