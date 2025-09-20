@@ -72,6 +72,7 @@
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     z-index: 9998; 
+    display: none; /* Oculta por defecto */
 }
 
 /* Pantalla */
@@ -373,178 +374,144 @@
 
         @media (max-width: 540px) { .proforma-main-actions-container { justify-content: center; } }
 
+        /* Contenedor principal para dividir proforma e inventario */
+        .main-sections-container {
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+            justify-content: center;
+            width: 100%;
+            margin-top: 18px;
+        }
+        /* Ajuste responsivo para móviles */
+        @media (max-width: 900px) {
+            .main-sections-container {
+                flex-direction: column;
+                gap: 18px;
+            }
+        }
+        .proforma-section, .inventario-section {
+            flex: 1 1 0;
+            min-width: 320px;
+            max-width: 600px;
+        }
     </style>
 </head>
 
 <body onload="inicializarProductos();">
 
+    <!-- Calculadora (movida aquí para que exista en el DOM) -->
+    <div id="calculator">
+        <div id="calc-display">
+            <input type="text" id="calc-output" readonly>
+        </div>
+        <div id="calc-buttons">
+            <button class="btn btn-ctrl" onclick="clearOutput()">C</button>
+            <button class="btn btn-op" onclick="appendOperator('%')">%</button>
+            <button class="btn btn-op" onclick="appendOperator('/')">/</button>
+            <button class="btn btn-op" onclick="appendOperator('*')">x</button>
+            <button class="btn btn-num" onclick="appendNumber(7)">7</button>
+            <button class="btn btn-num" onclick="appendNumber(8)">8</button>
+            <button class="btn btn-num" onclick="appendNumber(9)">9</button>
+            <button class="btn btn-op" onclick="appendOperator('-')">-</button>
+            <button class="btn btn-num" onclick="appendNumber(4)">4</button>
+            <button class="btn btn-num" onclick="appendNumber(5)">5</button>
+            <button class="btn btn-num" onclick="appendNumber(6)">6</button>
+            <button class="btn btn-op" onclick="appendOperator('+')">+</button>
+            <button class="btn btn-num" onclick="appendNumber(1)">1</button>
+            <button class="btn btn-num" onclick="appendNumber(2)">2</button>
+            <button class="btn btn-num" onclick="appendNumber(3)">3</button>
+            <button id="equal-btn" class="btn btn-equal" onclick="calculateResult()">=</button>
+            <button class="btn btn-num" onclick="appendNumber(0)" style="grid-column: span 2;">0</button>
+            <button class="btn btn-num" onclick="appendDot()">.</button>
+        </div>
+    </div>
+
                 <div style="position:relative;min-height:54px;margin-bottom:8px;">
                     <h1 id="main-title" style="margin:0;font-size:1.7rem;font-weight:bold;line-height:1.1;">UP-CONS<br>IMPORTADOR</h1>
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;width:92px;height:92px;" />
-                </div>
-    <div class="formulario">
-
-        
-        
-        
-        <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()">
-<select id="producto" onchange="copiarNombreYPrecio()">
-    </select>
-            
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  
-               
-
-
-<div id="calculator" style="display: none;">
-    <div id="calc-display">
-        <input type="text" id="calc-output" disabled />
-    </div>
-    <div id="calc-buttons">
-        <button class="btn btn-ctrl" onclick="clearOutput()">C</button>
-        <button class="btn btn-op" onclick="appendOperator('%')">%</button>
-        <button class="btn btn-op" onclick="appendOperator('/')">/</button>
-    <button class="btn btn-op" onclick="appendOperator('x')">x</button>
-
-        <button class="btn btn-num" onclick="appendNumber(7)">7</button>
-        <button class="btn btn-num" onclick="appendNumber(8)">8</button>
-        <button class="btn btn-num" onclick="appendNumber(9)">9</button>
-        <button class="btn btn-op" onclick="appendOperator('-')">-</button>
-
-        <button class="btn btn-num" onclick="appendNumber(4)">4</button>
-        <button class="btn btn-num" onclick="appendNumber(5)">5</button>
-        <button class="btn btn-num" onclick="appendNumber(6)">6</button>
-        <button class="btn btn-op" onclick="appendOperator('+')">+</button>
-
-        <button class="btn btn-num" onclick="appendNumber(1)">1</button>
-        <button class="btn btn-num" onclick="appendNumber(2)">2</button>
-        <button class="btn btn-num" onclick="appendNumber(3)">3</button>
-        <button id="equal-btn" class="btn btn-equal" rowspan="2" onclick="calculateResult()">=</button>
-
-        <button class="btn btn-num" onclick="appendNumber(0)">0</button>
-        <button class="btn btn-num" onclick="appendDot()">.</button>
-    </div>
-</div>
-
-
-           
-           
-           
-           
-           
-           
-           
-           
-            
-            
-            
-        <div class="item-container">
-    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 180px; font-size: 12px;">
-</div>
-
-<div class="item-container">PRECIO ➡️
-    <input type="number" id="precioProducto" placeholder="Precio del Producto" style="width: 100px; font-size: 12px;">
-</div>
-        
-        
-        
-        
-        
-      <div style="display: flex; align-items: center;">
-    <label for="cantidad" style="margin-right: 5px;">CANTIDAD ➡️</label>
-    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 12px;">
-</div>
-        
-        
-</div>
-<div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
-    <button id="agregarBtn" class="action-button btn-verde btn-small" style="margin-right: auto;" onclick="agregarProducto()">✅ Agregar producto</button>
-    <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
-</div>
-    <!-- Modal de Inventario (oculto inicialmente). No se puede cerrar hasta presionar 'Guardar y Cerrar'. -->
-    <div id="inventory-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;">
-        <div id="inventory-view" style="background:#fff;width:92%;max-width:920px;max-height:88vh;overflow:auto;padding:16px;border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,0.25);margin:4vh auto;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                <h3 style="margin:0;">Inventario de Productos</h3>
-                <div style="display:flex;gap:8px;">
-                    <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar PDF</button>
-                </div>
-            </div>
-
-            
-
-            <div id="inventory-list" style="max-height:60vh;overflow:auto;border-top:1px solid #eee;padding-top:8px;">
-                <!-- Filas de producto se insertarán aquí -->
-            </div>
-
-            <div class="inventory-footer">
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
-                    <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">🗑️ Borrar borrador</button>
-                    <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">💾 Guardar y Cerrar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-    
-    
-    
-    
-    
-
-<div class="proforma-main-actions-container">
-    <button class="proforma-action-btn btn-rojo" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
-    <button class="proforma-action-btn btn-rojo" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
-</div>
- 
- 
-
-
-    
-
-    
-
-
-
-    <div class="proforma-container panel-translucido" id="proforma">
-        
-        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
-            <img src="logo.png" alt="Up-cons logo" style="height:60px;vertical-align:middle;display:inline-block;">
-        </div>
-    <div style="font-size:9px; color:#111;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
-    Telf: 0983801298 - 0995986366</div>
-        <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
-        <div>
-            <label for="nombreCliente" style="font-size:11px;">Cliente:</label>
-            <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 120px; font-size:11px; padding:3px 6px;">
-        </div>
-    <table>
-            <tr>
-                <th>Producto</th>
-                <th>Cant.</th>
-                <th>Precio Uni.</th>
-                <th>Subtotal</th>
-                <th>Editar</th>
-                <th>Elim.</th>
-            </tr>
-    </table>
-        <h2 id="subtotal" style="font-size: 9px;"> </h2>
-        <h2 id="iva" style="font-size: 8px;"></h2>
-        <h2 id="total" style="font-size: 15px;">Total: $0.00</h2>
-        <div style="margin-top: 6px; font-size: 11px;">
-            <span><b>Vendedor:</b> <span id="nombreVendedorDisplay" style="font-weight: bold;"></span></span><br>
-            <span id="fechaProforma"></span><br>
-            <span style="color:#007bff; font-size:12px;">www.conupcons.com</span>
-        </div>
+                    <!-- Título y calculadora solo una vez -->
+                    <div class="main-sections-container">
+                        <!-- Sección Proforma -->
+                        <div class="proforma-section">
+                            <div class="formulario">
+                                <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()">
+                                <select id="producto" onchange="copiarNombreYPrecio()"></select>
+                                <div class="item-container">
+                                    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 180px; font-size: 12px;">
+                                </div>
+                                <div class="item-container">PRECIO ➡️
+                                    <input type="number" id="precioProducto" placeholder="Precio del Producto" style="width: 100px; font-size: 12px;">
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <label for="cantidad" style="margin-right: 5px;">CANTIDAD ➡️</label>
+                                    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 12px;">
+                                </div>
+                            </div>
+                            <div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
+                                <button id="agregarBtn" class="action-button btn-verde btn-small" style="margin-right: auto;" onclick="agregarProducto()">✅ Agregar producto</button>
+                                <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
+                            </div>
+                            <div class="proforma-main-actions-container">
+                                <button class="proforma-action-btn btn-rojo" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
+                                <button class="proforma-action-btn btn-rojo" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
+                            </div>
+                            <div class="proforma-container panel-translucido" id="proforma">
+                                <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
+                                    <img src="logo.png" alt="Up-cons logo" style="height:60px;vertical-align:middle;display:inline-block;">
+                                </div>
+                                <div style="font-size:9px; color:#111;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
+                                    Telf: 0983801298 - 0995986366</div>
+                                <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
+                                <div>
+                                    <label for="nombreCliente" style="font-size:11px;">Cliente:</label>
+                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 120px; font-size:11px; padding:3px 6px;">
+                                </div>
+                                <table>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Cant.</th>
+                                        <th>Precio Uni.</th>
+                                        <th>Subtotal</th>
+                                        <th>Editar</th>
+                                        <th>Elim.</th>
+                                    </tr>
+                                </table>
+                                <h2 id="subtotal" style="font-size: 9px;"> </h2>
+                                <h2 id="iva" style="font-size: 8px;"></h2>
+                                <h2 id="total" style="font-size: 15px;">Total: $0.00</h2>
+                                <div style="margin-top: 6px; font-size: 11px;">
+                                    <span><b>Vendedor:</b> <span id="nombreVendedorDisplay" style="font-weight: bold;"></span></span><br>
+                                    <span id="fechaProforma"></span><br>
+                                    <span style="color:#007bff; font-size:12px;">www.conupcons.com</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Sección Inventario -->
+                        <div class="inventario-section">
+                            <!-- Modal de Inventario (oculto inicialmente). No se puede cerrar hasta presionar 'Guardar y Cerrar'. -->
+                            <div id="inventory-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;">
+                                <div id="inventory-view" style="background:#fff;width:92%;max-width:920px;max-height:88vh;overflow:auto;padding:16px;border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,0.25);margin:4vh auto;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                        <h3 style="margin:0;">Inventario de Productos</h3>
+                                        <div style="display:flex;gap:8px;">
+                                            <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar PDF</button>
+                                        </div>
+                                    </div>
+                                    <div id="inventory-list" style="max-height:60vh;overflow:auto;border-top:1px solid #eee;padding-top:8px;">
+                                        <!-- Filas de producto se insertarán aquí -->
+                                    </div>
+                                    <div class="inventory-footer">
+                                        <div style="display:flex;gap:8px;align-items:center;">
+                                            <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
+                                            <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">🗑️ Borrar borrador</button>
+                                            <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">💾 Guardar y Cerrar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 <script>
 // Mostrar la fecha actual en la proforma
 function mostrarFechaProforma() {
@@ -556,6 +523,7 @@ function mostrarFechaProforma() {
 mostrarFechaProforma();
 </script>
 <script>
+
 // ----- INVENTARIO: funciones para manejar la vista y exportación -----
 function openInventory() {
     document.getElementById('inventory-modal').style.display = 'flex';
@@ -1250,35 +1218,39 @@ document.addEventListener('DOMContentLoaded', function() {
     // ID de la hoja de cálculo de Google Sheets
     const SHEET_ID = "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
 
+    // Variable global para almacenar todas las opciones de productos originales
+    let todosLosProductosOptions = [];
+
     // Función para cargar productos desde Google Sheets
     async function cargarProductosDesdeGoogleSheets() {
         const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
-
         try {
             const response = await fetch(url);
             const data = await response.text();
-
             console.log(data); // Para verificar que los datos se están obteniendo correctamente
 
             const productos = data.split("\n").map(line => line.split(","));
+            todosLosProductosOptions = []; // Limpiar antes de llenar
             
             // Verificar que los productos se han cargado
             if (productos.length > 0) {
+                const selectProducto = document.getElementById("producto");
+                selectProducto.innerHTML = ''; // Limpiar el select
+
                 productos.forEach(function(producto) {
                     const nombreProducto = producto[0];
                     const precioProducto = producto[1] ? parseFloat(producto[1]) : null;
 
+                    const option = document.createElement("option");
                     // Verificar si el precio está vacío o no es un número
                     if (!isNaN(precioProducto)) {
-                        const option = document.createElement("option");
                         option.text = `${nombreProducto} - $${precioProducto.toFixed(2)}`;
-                        document.getElementById("producto").add(option);
                     } else {
                         // Si no hay precio, solo muestra el nombre del producto
-                        const option = document.createElement("option");
                         option.text = `${nombreProducto}`;
-                        document.getElementById("producto").add(option);
                     }
+                    todosLosProductosOptions.push(option);
+                    selectProducto.add(option.cloneNode(true));
                 });
             }
         } catch (error) {
@@ -1297,24 +1269,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
     function buscarProducto() {
-    const busqueda = document.getElementById("buscador").value.toLowerCase();
-    const productos = document.querySelectorAll("#producto option"); // Asumiendo que tus productos están en un select
+        const busqueda = document.getElementById("buscador").value.toLowerCase();
+        const select = document.getElementById("producto");
+        const palabras = busqueda.split(" ").filter(palabra => palabra.trim() !== "");
 
-    const palabras = busqueda.split(" ").filter(palabra => palabra.trim() !== ""); // Separa las palabras y elimina espacios vacíos
+        // Limpiar opciones actuales
+        select.innerHTML = '';
 
-    productos.forEach(producto => {
-        const nombre = producto.textContent.toLowerCase();
-        
-        // Verifica si todas las palabras están en el nombre del producto
-        const todasEncontradas = palabras.every(palabra => nombre.includes(palabra));
-        
-        if (todasEncontradas) {
-            producto.style.display = ""; // Mostrar el producto
+        // Filtrar desde la lista maestra y añadir las opciones que coinciden
+        const productosFiltrados = todosLosProductosOptions.filter(option => {
+            const nombre = option.textContent.toLowerCase();
+            return palabras.every(palabra => nombre.includes(palabra));
+        });
+
+        if (productosFiltrados.length > 0) {
+            productosFiltrados.forEach(option => {
+                select.add(option.cloneNode(true));
+            });
+            // Seleccionar la primera coincidencia y actualizar campos
+            select.selectedIndex = 0;
+            if (typeof copiarNombreYPrecio === 'function') {
+                copiarNombreYPrecio();
+            }
         } else {
-            producto.style.display = "none"; // Ocultar el producto
+            // Si no hay coincidencias, limpiar los campos
+            select.selectedIndex = -1;
+            document.getElementById("nombreProducto").value = "";
+            document.getElementById("precioProducto").value = "";
         }
-    });
-}
+    }
     
     
     
@@ -1328,14 +1311,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function copiarNombreYPrecio() {
         var seleccion = document.getElementById("producto");
+        if (seleccion.selectedIndex < 0) return; // No hacer nada si no hay nada seleccionado
+
         var nombrePrecio = seleccion.options[seleccion.selectedIndex].text.split(" - $");
         var nombreProducto = document.getElementById("nombreProducto");
         var precioProducto = document.getElementById("precioProducto");
+
         nombreProducto.value = nombrePrecio[0] || "";
+
         if (nombrePrecio.length > 1 && !isNaN(parseFloat(nombrePrecio[1]))) {
             precioProducto.value = parseFloat(nombrePrecio[1]);
         } else {
-            precioProducto.value = "";
+            precioProducto.value = ""; // Limpiar si no hay precio
         }
     }
     
@@ -1389,6 +1376,13 @@ document.addEventListener('DOMContentLoaded', function() {
             cell6.appendChild(deleteButton);
 
             calcularTotal();
+
+            // Limpiar campos después de agregar
+            document.getElementById("buscador").value = "";
+            document.getElementById("nombreProducto").value = "";
+            document.getElementById("precioProducto").value = "";
+            document.getElementById("cantidad").value = "1";
+            buscarProducto(); // Opcional: restablecer la lista de productos
         } else {
             alert("Por favor, ingrese un nombre y un precio válido.");
         }
