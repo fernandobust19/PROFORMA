@@ -244,11 +244,15 @@
     #main-title {
         cursor: pointer;
         user-select: none; /* Evita que el texto se seleccione al hacer clic */
-        transition: text-shadow 0.2s ease;
+        transition: filter 0.2s ease, transform 0.2s ease;
         display: inline-block; /* Para que el hover no ocupe toda la línea */
+        height: 70px; /* Altura del logo */
+        vertical-align: middle;
     }
     #main-title:hover {
-        text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.5);
+        /* Efecto de brillo para la imagen */
+        filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9));
+        transform: scale(1.03); /* Ligero zoom al pasar el mouse */
     }
 
 
@@ -428,7 +432,7 @@
     </div>
 
                 <div style="position:relative;min-height:54px;margin-bottom:8px;">
-                    <h1 id="main-title" style="margin:0;font-size:1.7rem;font-weight:bold;line-height:1.1;">UP-CONS<br>IMPORTADOR</h1>
+                    <img id="main-title" src="logo.png" alt="UP-CONS IMPORTADOR - Clic para cambiar fondo" title="Clic para cambiar fondo">
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;width:92px;height:92px;" />
                     <!-- Título y calculadora solo una vez -->
                     <div class="main-sections-container">
