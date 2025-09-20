@@ -1056,6 +1056,15 @@ function guardarPaginaPersonalizadaDesdeModal() {
         `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
     );
 
+    // Guardar en localStorage la proforma (nombre, fecha, html)
+    let proformas = [];
+    try {
+        proformas = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
+    } catch(e) { proformas = []; }
+    if (!Array.isArray(proformas)) proformas = [];
+    proformas.push({ name: nombrePagina, savedAt: new Date().toISOString(), html: htmlClonado });
+    localStorage.setItem('proformas_guardadas', JSON.stringify(proformas));
+
     const blob = new Blob([htmlClonado], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1476,47 +1485,181 @@ function guardarPagina() {
 
 
     function cargarPagina() {
-        // Elimina cualquier modal de guardar si existe ANTES de abrir el selector
-        var modal = document.getElementById('modal-nombre-archivo');
-        if (modal) modal.remove();
-
-        var fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.html';
-        fileInput.style.display = 'none';
-        document.body.appendChild(fileInput);
-
-        fileInput.addEventListener('change', function(event) {
-            var file = event.target.files[0];
-            if (!file) {
-                alert("Por favor, seleccione un archivo.");
-                document.body.removeChild(fileInput);
-                return;
+    // Modal con lista de proformas guardadas en localStorage
+    if (document.getElementById('modal-lista-proformas')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-lista-proformas';
+    overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:18px 20px 14px 20px;border-radius:14px;min-width:260px;max-width:96vw;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-24px) scale(0.96);animation:popIn 320ms cubic-bezier(.2,1.2,.3,1) forwards;';
+    box.innerHTML = `<div style=\"font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;\">Proformas guardadas</div>`;
+    // Soporte experimental File System Access API
+    if (window.showDirectoryPicker) {
+        const dirBtn = document.createElement('button');
+        dirBtn.textContent = 'Seleccionar carpeta de proformas (experimental)';
+        dirBtn.className = 'inventory-action-btn';
+        dirBtn.style.background = '#007bff';
+        dirBtn.style.color = '#fff';
+        dirBtn.style.marginBottom = '12px';
+        dirBtn.onclick = async function() {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                box.innerHTML = `<div style=\"font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;\">Proformas en carpeta seleccionada</div>`;
+                let found = false;
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'file' && entry.name.endsWith('.html')) {
+                        found = true;
+                        const file = await entry.getFile();
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;gap:6px;';
+                        const info = document.createElement('div');
+                        info.innerHTML = `<div style=\'font-weight:600\'>${entry.name}</div><div style=\'font-size:11px;color:#666\'>${new Date(file.lastModified).toLocaleString()}</div>`;
+                        const openBtn = document.createElement('button');
+                        openBtn.textContent = 'Abrir';
+                        openBtn.className = 'inventory-action-btn';
+                        openBtn.style.background = '#14b8ff';
+                        openBtn.style.color = '#fff';
+                        openBtn.onclick = async function() {
+                            const text = await file.text();
+                            overlay.remove();
+                            cargarProformaEnPagina(text);
+                        };
+                        row.appendChild(info); row.appendChild(openBtn); box.appendChild(row);
+                    }
+                }
+                if (!found) {
+                    box.innerHTML += '<div style="padding:14px 6px;color:#888;">No se encontraron archivos .html en la carpeta seleccionada.</div>';
+                }
+                // Botón cerrar
+                const footer = document.createElement('div');
+                footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;gap:8px;';
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = 'Cerrar';
+                closeBtn.className = 'inventory-action-btn';
+                closeBtn.onclick = () => overlay.remove();
+                footer.appendChild(closeBtn); box.appendChild(footer);
+            } catch(e) {
+                alert('No se pudo acceder a la carpeta.');
             }
-
-            var reader = new FileReader();
-            reader.onload = function(event) {
-                // Abrir el HTML en una nueva pestaña para evitar conflictos de scripts y modales
-                var newWindow = window.open();
-                newWindow.document.write(event.target.result);
-                newWindow.document.close();
-
-                // Espera a que el nuevo documento esté listo y ejecuta los eventos
-                newWindow.onload = function() {
-                    if (typeof newWindow.establecerEventos === "function") {
-                        newWindow.establecerEventos();
-                    }
-                    if (typeof newWindow.calcularTotal === "function") {
-                        newWindow.calcularTotal();
-                    }
-                };
-            };
-            reader.readAsText(file);
-            document.body.removeChild(fileInput);
-        });
-
-        fileInput.click();
+        };
+        box.appendChild(dirBtn);
+    } else {
+        box.innerHTML += '<div style="padding:10px;color:#888;font-size:13px;">Tu navegador no permite acceso directo a carpetas. Usa Chrome/Edge en PC para esta función.</div>';
     }
+    // Listado localStorage (siempre disponible)
+    let proformas = [];
+    try {
+        proformas = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
+    } catch(e) { proformas = []; }
+    if (!Array.isArray(proformas)) proformas = [];
+    if (proformas.length === 0) {
+        box.innerHTML += '<div style="padding:14px 6px;color:#888;">No hay proformas guardadas.<br>Guarda una proforma primero.</div>';
+    } else {
+        proformas.slice().reverse().forEach((item, idx) => {
+            const realIdx = proformas.length - 1 - idx;
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;gap:6px;';
+            const info = document.createElement('div');
+            info.innerHTML = `<div style=\'font-weight:600\'>${item.name || 'proforma_' + (realIdx+1)}</div><div style=\'font-size:11px;color:#666\'>${item.savedAt ? new Date(item.savedAt).toLocaleString() : ''}</div>`;
+            const openBtn = document.createElement('button');
+            openBtn.textContent = 'Abrir';
+            openBtn.className = 'inventory-action-btn';
+            openBtn.style.background = '#14b8ff';
+            openBtn.style.color = '#fff';
+            openBtn.onclick = function() {
+                overlay.remove();
+                cargarProformaEnPagina(item.html);
+            };
+            // Botón eliminar
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Eliminar';
+            delBtn.className = 'inventory-action-btn btn-rojo';
+            delBtn.style.background = '#ff3864';
+            delBtn.style.color = '#fff';
+            delBtn.onclick = function() {
+                if (!confirm('¿Eliminar esta proforma guardada?')) return;
+                let proformasActuales = [];
+                try {
+                    proformasActuales = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
+                } catch(e) { proformasActuales = []; }
+                if (!Array.isArray(proformasActuales)) proformasActuales = [];
+                proformasActuales.splice(realIdx, 1);
+                localStorage.setItem('proformas_guardadas', JSON.stringify(proformasActuales));
+                overlay.remove();
+                cargarPagina();
+            };
+            row.appendChild(info); row.appendChild(openBtn); row.appendChild(delBtn); box.appendChild(row);
+        });
+    }
+    // Botón cerrar
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;gap:8px;';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Cerrar';
+    closeBtn.className = 'inventory-action-btn';
+    closeBtn.onclick = () => overlay.remove();
+    footer.appendChild(closeBtn); box.appendChild(footer);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+// Cargar la proforma seleccionada en la misma página (DOM)
+function cargarProformaEnPagina(html) {
+    // Crear un DOM temporal para extraer los datos
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    // Extraer valores de los campos principales
+    const nombreCliente = tempDiv.querySelector('#nombreCliente')?.value || '';
+    const nombreVendedor = tempDiv.querySelector('#nombreVendedorDisplay')?.innerText || '';
+    // Limpiar tabla de productos
+    const tabla = document.querySelector('table');
+    while (tabla.rows.length > 1) tabla.deleteRow(1);
+    // Extraer filas de productos
+    const filas = tempDiv.querySelectorAll('table tr');
+    for (let i = 1; i < filas.length; i++) {
+        const celdas = filas[i].querySelectorAll('td');
+        if (celdas.length >= 4) {
+            const nombre = celdas[0].innerText;
+            const cantidad = celdas[1].innerText;
+            const precio = celdas[2].innerText.replace('$','');
+            // Agregar producto a la tabla actual
+            var newRow = tabla.insertRow(tabla.rows.length);
+            var cell1 = newRow.insertCell(0);
+            var cell2 = newRow.insertCell(1);
+            var cell3 = newRow.insertCell(2);
+            var cell4 = newRow.insertCell(3);
+            var cell5 = newRow.insertCell(4);
+            var cell6 = newRow.insertCell(5);
+            cell1.innerHTML = nombre;
+            cell2.innerHTML = cantidad;
+            cell3.innerHTML = "$" + parseFloat(precio).toFixed(2);
+            cell4.innerHTML = "$" + (parseFloat(precio) * parseInt(cantidad)).toFixed(2);
+            // Botón editar
+            var editButton = document.createElement("button");
+            editButton.innerHTML = '<i class="fas fa-edit edit-icon" style="font-size:12px;"></i>';
+            editButton.className = "edit-btn";
+            editButton.style.padding = "2px 4px";
+            editButton.onclick = function() {
+                editarProducto(newRow, nombre, parseFloat(precio), parseInt(cantidad));
+            };
+            cell5.appendChild(editButton);
+            // Botón eliminar
+            var deleteButton = document.createElement("button");
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i>';
+            deleteButton.className = "close-btn";
+            deleteButton.style.padding = "2px 4px";
+            deleteButton.onclick = function() {
+                tabla.deleteRow(newRow.rowIndex);
+                calcularTotal();
+            };
+            cell6.appendChild(deleteButton);
+        }
+    }
+    // Actualizar campos principales
+    document.getElementById('nombreCliente').value = nombreCliente;
+    document.getElementById('nombreVendedorDisplay').innerText = nombreVendedor;
+    calcularTotal();
+    establecerEventos();
+}
 
     // Función para establecer los eventos de editar y eliminar productos
     function establecerEventos() {
