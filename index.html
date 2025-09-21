@@ -476,12 +476,13 @@
 
         /* Estilo para la barra de scroll de cantidad */
         #cantidad-scrollbar {
-            width: 8px;
-            height: 30px;
+            /* La anchura es flexible */
+            height: 14px; /* Más gruesa */
             background-color: #2ecc40; /* Verde */
-            border-radius: 4px;
-            cursor: ns-resize; /* Cursor para indicar scroll vertical */
+            border-radius: 7px;
+            cursor: ew-resize; /* Cursor para indicar scroll horizontal */
             transition: background-color 0.2s ease;
+            flex-grow: 1; /* Ocupa el espacio disponible */
         }
         #cantidad-scrollbar.scrolling {
             background-color: #ffc107; /* Amarillo/Naranja al usarla */
@@ -539,10 +540,10 @@
                                         <input type="number" id="precioProducto" placeholder="Precio" step="0.01" style="width: 110px; font-size: 16px; padding-left: 24px;">
                                     </div>
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%; justify-content: center;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%;">
                                     <label for="cantidad" style="text-shadow: 0 0 7px rgba(255,255,255,0.9);">CANTIDAD:</label>
                                     <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 16px; text-align: center; margin-bottom: 0;">
-                                    <div id="cantidad-scrollbar" title="Use la rueda del ratón para cambiar la cantidad"></div>
+                                    <div id="cantidad-scrollbar" title="Use la rueda del ratón o deslice para cambiar la cantidad"></div>
                                 </div>
                             </div>
                             <div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
@@ -1811,7 +1812,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const min = parseInt(cantidadInput.min, 10) || 1;
 
         // Incrementar o decrementar según la dirección de la rueda
-        if (event.deltaY < 0) {
+        if (event.deltaY < 0 || event.deltaX < 0) {
             currentValue++; // Rueda hacia arriba
         } else {
             currentValue--; // Rueda hacia abajo
