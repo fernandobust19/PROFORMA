@@ -501,6 +501,20 @@
             animation: none;
         }
 
+        /* Estilo para el botón de limpiar búsqueda (lupa) */
+        .search-clear-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--neon-primary); /* Color azul claro del tema */
+            cursor: pointer;
+            padding: 8px; /* Aumenta el área de clic */
+            transition: color 0.2s;
+        }
+        /* Cambia a violeta al pasar el mouse para dar feedback */
+        .search-clear-btn:hover { color: var(--neon-secondary); }
+
     </style>
 </head>
 
@@ -545,8 +559,8 @@
                         <div class="proforma-section">
                             <div class="formulario">
                                 <div style="position: relative; width: 100%;">
-                                    <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()" style="padding-right: 35px;">
-                                    <i class="fas fa-search" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #aaa; pointer-events: none;"></i>
+                                    <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()" style="padding-right: 50px;">
+                                    <i class="fas fa-search search-clear-btn" onclick="limpiarBuscador()"></i>
                                 </div>
                                 <select id="producto" onchange="copiarNombreYPrecio()"></select>
                                 <div style="display: flex; gap: 8px; width: 100%; align-items: center; margin-bottom: 8px;">
@@ -1398,6 +1412,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicialización de productos
     function inicializarProductos() {
         cargarProductosDesdeGoogleSheets();
+    }
+
+    function limpiarBuscador() {
+        const buscadorInput = document.getElementById("buscador");
+        buscadorInput.value = "";
+        buscarProducto(); // Actualiza la lista de productos
+        buscadorInput.focus(); // Pone el foco para escribir de nuevo
     }
 
 
