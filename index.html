@@ -47,6 +47,8 @@
     -webkit-user-drag: none;
     transition: transform 0.15s ease;
     z-index: 9999;
+    outline: none; /* Evita el recuadro de foco */
+    -webkit-tap-highlight-color: transparent; /* Evita el resaltado en móviles */
     display: inline-block;
 }
 
@@ -264,6 +266,8 @@
     #main-title {
         cursor: pointer;
         user-select: none; /* Evita que el texto se seleccione al hacer clic */
+        outline: none; /* Evita el recuadro de foco */
+        -webkit-tap-highlight-color: transparent; /* Evita el resaltado en móviles */
         transition: filter 0.2s ease, transform 0.2s ease;
         display: inline-block; /* Para que el hover no ocupe toda la línea */
         height: 70px; /* Altura del logo */
