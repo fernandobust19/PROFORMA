@@ -58,6 +58,11 @@
     transform: scale(1.02);
 }
 
+/* Efecto de hundido al presionar el ícono de la calculadora */
+#calculator-btn:active {
+    transform: translateY(1px) scale(0.98);
+}
+
 /* Estilo de la calculadora (neon) */
 #calculator {
     position: fixed;
@@ -127,7 +132,8 @@
 }
 
 #calc-buttons .btn:active {
-    transform: translateY(0);
+    transform: translateY(1px); /* Se hunde un poco */
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.7) inset; /* Sombra interior */
 }
 
 /* Variantes */
@@ -183,6 +189,8 @@
     gap: 8px;
     position: relative;
     overflow: hidden;
+    outline: none; /* Doble seguridad para quitar el recuadro de foco */
+    -webkit-tap-highlight-color: transparent; /* Elimina el recuadro de toque en móviles */
 }
 /* Colores individuales */
 .btn-rojo {
@@ -205,8 +213,9 @@
     box-shadow: 0 4px 12px #0003, 0 0 0 2px #fff, 0 0 10px #fff8 inset;
 }
 .proforma-action-btn:active, .action-button:active {
-    transform: scale(0.95);
-    box-shadow: 0 1px 4px #0002, 0 0 0 1.5px #bbb;
+    /* Efecto de hundido al presionar */
+    transform: translateY(1px) scale(0.98);
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.2);
 }
 
     /* Estilos específicos para el footer del modal de inventario */
@@ -233,6 +242,12 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
+    }
+    
+    /* Efecto de hundido para los botones del inventario */
+    .inventory-action-btn:active {
+        transform: translateY(1px);
+        box-shadow: inset 0 2px 5px rgba(0,0,0,0.15);
     }
 
     @media (max-width: 540px) {
@@ -301,6 +316,7 @@
         border: none;
         cursor: pointer;
         padding: 4px;
+        outline: none; /* Evita el recuadro azul al hacer clic */
     }
     table {
         width: 100%;
@@ -462,7 +478,7 @@
                             </div>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
-                                    <img src="logo.png" alt="Up-cons logo" style="height:60px;vertical-align:middle;display:inline-block;">
+                                    <img src="logo.png" alt="Up-cons logo" style="height:40px;vertical-align:middle;display:inline-block;">
                                 </div>
                                 <div style="font-size:11px; color:#111;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
                                     Sucursal. Av Mariscal Sucre y Arturo Tipanguano <br> Telf: 0983801298 - 0995986366</div>
@@ -1156,12 +1172,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 backgroundColor: "#ffffff"
             }).then((canvas) => {
                 const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-                
-                // Crear un enlace para forzar la descarga de la imagen
-                const enlace = document.createElement("a");
-                enlace.href = dataUrl;
-                enlace.download = "proforma.jpg";
-                enlace.click();
+
+                // Detectar si es un dispositivo iOS (iPhone, iPad)
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+                if (isIOS) {
+                    // En iOS, abrir la imagen en una nueva pestaña para que el usuario la guarde manualmente
+                    const newTab = window.open();
+                    if (newTab) {
+                        newTab.document.write('<html><head><title>Proforma</title></head><body style="margin:0;"><img src="' + dataUrl + '" style="width:100%; display:block;" alt="Proforma"></body></html>');
+                    } else {
+                        alert('No se pudo abrir una nueva pestaña. Por favor, deshabilita el bloqueador de pop-ups.');
+                    }
+                } else {
+                    // Para otros dispositivos, forzar la descarga directa
+                    const enlace = document.createElement("a");
+                    enlace.href = dataUrl;
+                    enlace.download = "proforma.jpg";
+                    enlace.click();
+                }
 
                 // Limpiar y restaurar la vista original
                 vendedorDisplay.innerText = "";
