@@ -344,6 +344,17 @@
         border-color: var(--neon-primary);
         box-shadow: inset 0 1px 3px rgba(0,0,0,0.06), 0 0 0 3px rgba(20, 184, 255, 0.15);
     }
+    /* Estilos específicos para el campo de nombre de cliente */
+    #nombreCliente {
+        background-color: #ffffff;
+        border: none;
+        box-shadow: none;
+        font-style: italic;
+    }
+    #nombreCliente:focus {
+        box-shadow: none;
+        animation: none;
+    }
     .formulario {
         display: flex;
         flex-direction: column;
@@ -531,13 +542,13 @@
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
                                     <img src="logo.png" alt="Up-cons logo" style="height:50px;vertical-align:middle;display:inline-block;">
                                 </div>
-                                <div style="font-size:11px; color:#111;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
+                                <div style="font-size:11px; color:#111; margin-bottom: 10px;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
                                     Sucursal. Av Mariscal Sucre y Arturo Tipanguano <br> Telf: 0983801298 - 0995986366</div>
-                                <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
                                 <div>
                                     <label for="nombreCliente" style="font-size:11px;">Cliente:</label>
-                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 120px; font-size:16px; padding:3px 6px;">
+                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 180px; font-size:16px; padding:3px 6px;">
                                 </div>
+                                <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
                                 <table>
                                     <tr>
                                         <th>Producto</th>
