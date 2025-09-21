@@ -208,6 +208,11 @@
     color: #fff;
     border: none;
 }
+.btn-celeste {
+    background: linear-gradient(180deg, #a0d8ef 0%, #67b8de 100%);
+    color: #102035; /* Texto oscuro para mejor contraste */
+    border: none;
+}
 .proforma-action-btn:hover, .action-button:hover {
     transform: translateY(-1px) scale(1.02);
     box-shadow: 0 4px 12px #0003, 0 0 0 2px #fff, 0 0 10px #fff8 inset;
@@ -473,8 +478,8 @@
                                 <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
                             </div>
                             <div class="proforma-main-actions-container">
-                                <button class="proforma-action-btn btn-rojo" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
-                                <button class="proforma-action-btn btn-rojo" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
+                                <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
+                                <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
                             </div>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
