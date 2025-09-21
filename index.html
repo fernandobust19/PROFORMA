@@ -1852,11 +1852,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Lógica para Arrastrar (Drag & Touch) ---
     let isDragging = false;
     let startX = 0;
-    const dragThreshold = 25; // Píxeles de arrastre para cambiar la cantidad
+    let lastX = 0;
+    const sensitivity = 20; // Píxeles para el primer incremento. Menor = más sensible.
 
     function handleDragStart(event) {
         isDragging = true;
-        startX = event.pageX || event.touches[0].pageX;
+        const currentX = event.pageX || event.touches[0].pageX;
+        startX = currentX;
+        lastX = currentX;
         scrollbar.classList.add('scrolling');
         event.preventDefault();
     }
@@ -1865,15 +1868,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!isDragging) return;
         event.preventDefault();
         const currentX = event.pageX || event.touches[0].pageX;
-        const deltaX = currentX - startX;
+        const totalDeltaX = currentX - startX; // Distancia total desde el inicio del arrastre
+        const moveDeltaX = currentX - lastX;   // Distancia desde el último movimiento registrado
 
-        if (Math.abs(deltaX) > dragThreshold) {
-            if (deltaX > 0) {
-                incrementQuantity();
-            } else {
-                decrementQuantity();
+        // El "salto" aumenta cuanto más lejos arrastras desde el punto inicial
+        const accelerationFactor = 1 + Math.floor(Math.abs(totalDeltaX) / 80);
+
+        // Si el movimiento es suficiente para un cambio
+        if (Math.abs(moveDeltaX) > sensitivity) {
+            const direction = moveDeltaX > 0 ? 1 : -1;
+            for (let i = 0; i < accelerationFactor; i++) {
+                direction > 0 ? incrementQuantity() : decrementQuantity();
             }
-            startX = currentX; // Reiniciar para un arrastre continuo
+            lastX = currentX; // Actualizar la última posición para el siguiente cálculo
         }
     }
 
