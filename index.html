@@ -1846,25 +1846,34 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Lógica para Arrastrar (Drag & Touch) ---
     let isDragging = false;
     let startX = 0;
-    const dragThreshold = 25; // Píxeles de arrastre para cambiar la cantidad
+    let lastX = 0;
+    // Sensibilidad: menos píxeles para un cambio de 1.
+    const baseSensitivity = 20; // Píxeles para el primer incremento.
 
     function handleDragStart(event) {
         isDragging = true;
-        startX = event.pageX || event.touches[0].pageX;
+        const currentX = event.pageX || event.touches[0].pageX;
+        startX = currentX;
+        lastX = currentX;
         scrollbar.classList.add('scrolling');
         event.preventDefault();
     }
 
     function handleDragMove(event) {
         if (!isDragging) return;
-        event.preventDefault();
         const currentX = event.pageX || event.touches[0].pageX;
-        const deltaX = currentX - startX;
+        const totalDeltaX = currentX - startX; // Distancia total desde el inicio
+        const moveDeltaX = currentX - lastX;   // Distancia desde el último movimiento
 
-        if (Math.abs(deltaX) > dragThreshold) {
-            if (deltaX > 0) { incrementQuantity(); } 
-            else { decrementQuantity(); }
-            startX = currentX; // Reiniciar para un arrastre continuo
+        // Aceleración: el cambio es mayor cuanto más lejos se arrastra.
+        // Math.sign obtiene la dirección (+1 o -1).
+        const changeAmount = Math.sign(moveDeltaX) * (1 + Math.floor(Math.abs(totalDeltaX) / (baseSensitivity * 4)));
+
+        if (Math.abs(moveDeltaX) > baseSensitivity / 2) { // Umbral para registrar movimiento
+            for (let i = 0; i < Math.abs(changeAmount); i++) {
+                moveDeltaX > 0 ? incrementQuantity() : decrementQuantity();
+            }
+            lastX = currentX;
         }
     }
 
