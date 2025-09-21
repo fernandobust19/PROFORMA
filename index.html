@@ -358,6 +358,7 @@
         margin-bottom: 10px;
     }
     select {
+        padding-right: 35px; /* Espacio para que la flecha no se superponga con el texto */
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
         background-repeat: no-repeat;
         background-position: right 0.75rem center;
@@ -543,7 +544,10 @@
                         <!-- Sección Proforma -->
                         <div class="proforma-section">
                             <div class="formulario">
-                                <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()">
+                                <div style="position: relative; width: 100%;">
+                                    <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()" style="padding-right: 35px;">
+                                    <i class="fas fa-search" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #aaa; pointer-events: none;"></i>
+                                </div>
                                 <select id="producto" onchange="copiarNombreYPrecio()"></select>
                                 <div style="display: flex; gap: 8px; width: 100%; align-items: center; margin-bottom: 8px;">
                                     <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="flex-grow: 1; font-size: 16px;">
@@ -1404,15 +1408,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function buscarProducto() {
         const busqueda = document.getElementById("buscador").value.toLowerCase();
         const select = document.getElementById("producto");
-        const palabras = busqueda.split(" ").filter(palabra => palabra.trim() !== "");
+        const palabras = busqueda.split(" ").filter(p => p.trim() !== "");
 
         // Limpiar opciones actuales
         select.innerHTML = '';
 
         // Filtrar desde la lista maestra y añadir las opciones que coinciden
+        // La nueva lógica permite que las palabras de búsqueda aparezcan en cualquier orden
         const productosFiltrados = todosLosProductosOptions.filter(option => {
-            const nombre = option.textContent.toLowerCase();
-            return palabras.every(palabra => nombre.includes(palabra));
+            const nombreCompleto = option.textContent.toLowerCase();
+            let nombreProducto = nombreCompleto.split(' - $')[0]; // Obtener solo la parte del nombre, antes del precio
+            
+            // Lógica mejorada: Separa números de letras (ej: "100mm" -> "100 mm") para que la búsqueda por palabra completa funcione.
+            nombreProducto = nombreProducto.replace(/(\d+)([a-zA-Z]+)/g, '$1 $2');
+
+            // Lógica mejorada: Busca palabras que COMIENCEN con el término de búsqueda para resultados instantáneos y precisos.
+            return palabras.every(palabra => new RegExp('\\b' + palabra).test(nombreProducto));
         });
 
         if (productosFiltrados.length > 0) {
@@ -1851,15 +1862,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Lógica para Arrastrar (Drag & Touch) ---
     let isDragging = false;
-    let startX = 0;
     let lastX = 0;
-    const sensitivity = 20; // Píxeles para el primer incremento. Menor = más sensible.
+    let accumulatedDelta = 0;
+    const sensitivity = 15; // Píxeles de arrastre para un incremento. Menor = más sensible.
 
     function handleDragStart(event) {
         isDragging = true;
-        const currentX = event.pageX || event.touches[0].pageX;
-        startX = currentX;
-        lastX = currentX;
+        lastX = event.pageX || event.touches[0].pageX;
+        accumulatedDelta = 0; // Reiniciar el acumulador
         scrollbar.classList.add('scrolling');
         event.preventDefault();
     }
@@ -1868,19 +1878,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!isDragging) return;
         event.preventDefault();
         const currentX = event.pageX || event.touches[0].pageX;
-        const totalDeltaX = currentX - startX; // Distancia total desde el inicio del arrastre
-        const moveDeltaX = currentX - lastX;   // Distancia desde el último movimiento registrado
+        const moveDeltaX = currentX - lastX;
+        lastX = currentX;
 
-        // El "salto" aumenta cuanto más lejos arrastras desde el punto inicial
-        const accelerationFactor = 1 + Math.floor(Math.abs(totalDeltaX) / 80);
+        accumulatedDelta += moveDeltaX;
 
-        // Si el movimiento es suficiente para un cambio
-        if (Math.abs(moveDeltaX) > sensitivity) {
-            const direction = moveDeltaX > 0 ? 1 : -1;
-            for (let i = 0; i < accelerationFactor; i++) {
-                direction > 0 ? incrementQuantity() : decrementQuantity();
+        // Calcula cuántos incrementos aplicar basados en la distancia acumulada
+        const incrementsToApply = Math.floor(accumulatedDelta / sensitivity);
+
+        if (incrementsToApply !== 0) {
+            for (let i = 0; i < Math.abs(incrementsToApply); i++) {
+                incrementsToApply > 0 ? incrementQuantity() : decrementQuantity();
             }
-            lastX = currentX; // Actualizar la última posición para el siguiente cálculo
+            // Resta la distancia ya procesada del acumulador
+            accumulatedDelta -= incrementsToApply * sensitivity;
         }
     }
 
