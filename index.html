@@ -473,6 +473,20 @@
             min-width: 320px;
             max-width: 600px;
         }
+
+        /* Estilo para la barra de scroll de cantidad */
+        #cantidad-scrollbar {
+            width: 8px;
+            height: 30px;
+            background-color: #2ecc40; /* Verde */
+            border-radius: 4px;
+            cursor: ns-resize; /* Cursor para indicar scroll vertical */
+            transition: background-color 0.2s ease;
+        }
+        #cantidad-scrollbar.scrolling {
+            background-color: #ffc107; /* Amarillo/Naranja al usarla */
+        }
+
     </style>
 </head>
 
@@ -518,16 +532,17 @@
                             <div class="formulario">
                                 <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()">
                                 <select id="producto" onchange="copiarNombreYPrecio()"></select>
-                                <div class="item-container">
-                                    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="width: 180px; font-size: 16px;">
+                                <div style="display: flex; gap: 8px; width: 100%; align-items: center; margin-bottom: 8px;">
+                                    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="flex-grow: 1; font-size: 16px;">
+                                    <div style="position: relative; display: flex; align-items: center;">
+                                        <span style="position: absolute; left: 10px; font-size: 16px; color: #555; pointer-events: none;">$</span>
+                                        <input type="number" id="precioProducto" placeholder="Precio" step="0.01" style="width: 110px; font-size: 16px; padding-left: 24px;">
+                                    </div>
                                 </div>
-                                <div style="display: flex; align-items: center;">
-                                    <label for="precioProducto" style="margin-right: 5px; text-shadow: 0 0 7px rgba(255,255,255,0.9);">PRECIO ➡️</label>
-                                    <input type="number" id="precioProducto" placeholder="Precio del Producto" style="width: 100px; font-size: 16px;">
-                                </div>
-                                <div style="display: flex; align-items: center;">
-                                    <label for="cantidad" style="margin-right: 5px; text-shadow: 0 0 7px rgba(255,255,255,0.9);">CANTIDAD ➡️</label>
-                                    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 16px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%; justify-content: center;">
+                                    <label for="cantidad" style="text-shadow: 0 0 7px rgba(255,255,255,0.9);">CANTIDAD:</label>
+                                    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 16px; text-align: center; margin-bottom: 0;">
+                                    <div id="cantidad-scrollbar" title="Use la rueda del ratón para cambiar la cantidad"></div>
                                 </div>
                             </div>
                             <div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
@@ -1425,7 +1440,7 @@ document.addEventListener('DOMContentLoaded', function() {
         nombreProducto.value = nombrePrecio[0] || "";
 
         if (nombrePrecio.length > 1 && !isNaN(parseFloat(nombrePrecio[1]))) {
-            precioProducto.value = parseFloat(nombrePrecio[1]);
+            precioProducto.value = parseFloat(nombrePrecio[1]).toFixed(2);
         } else {
             precioProducto.value = ""; // Limpiar si no hay precio
         }
@@ -1778,6 +1793,55 @@ function calculateResult() {
     }
 }
 
+</script>
+
+<script>
+// Lógica para el control de cantidad con rueda de ratón y vibración
+document.addEventListener('DOMContentLoaded', function() {
+    const cantidadInput = document.getElementById('cantidad');
+    const scrollbar = document.getElementById('cantidad-scrollbar');
+
+    // Función centralizada para manejar el cambio de cantidad
+    function handleQuantityChange(event) {
+        // Prevenir el comportamiento por defecto (scroll de la página)
+        event.preventDefault();
+
+        // Obtener valor actual, o 1 si está vacío
+        let currentValue = parseInt(cantidadInput.value, 10) || 1;
+        const min = parseInt(cantidadInput.min, 10) || 1;
+
+        // Incrementar o decrementar según la dirección de la rueda
+        if (event.deltaY < 0) {
+            currentValue++; // Rueda hacia arriba
+        } else {
+            currentValue--; // Rueda hacia abajo
+        }
+
+        // Asegurar que el valor no sea menor que el mínimo permitido
+        cantidadInput.value = Math.max(min, currentValue);
+
+        // Vibrar en dispositivos compatibles
+        if (navigator.vibrate) {
+            navigator.vibrate(50); // Vibración corta de 50ms
+        }
+
+        // Cambiar color de la barra de scroll visual y luego revertirlo
+        if (scrollbar) {
+            scrollbar.classList.add('scrolling');
+            setTimeout(() => {
+                scrollbar.classList.remove('scrolling');
+            }, 300); // El color vuelve a la normalidad después de 300ms
+        }
+    }
+
+    // Asignar el evento tanto al input como a la barra visual
+    if (cantidadInput) {
+        cantidadInput.addEventListener('wheel', handleQuantityChange);
+    }
+    if (scrollbar) {
+        scrollbar.addEventListener('wheel', handleQuantityChange);
+    }
+});
 </script>
 
 <!-- Inventario actions (botones) -->
