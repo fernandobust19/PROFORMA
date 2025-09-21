@@ -592,7 +592,7 @@
                                     Sucursal. Av Mariscal Sucre y Arturo Tipanguano <br> Telf: 0983801298 - 0995986366</div>
                                 <div>
                                     <label for="nombreCliente" style="font-size:11px;">Cliente:</label>
-                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 180px; font-size:16px; padding:3px 6px;">
+                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 180px; font-size:12px; padding:3px 6px;">
                                 </div>
                                 <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
                                 <table>
@@ -1123,7 +1123,7 @@ function guardarPaginaPersonalizadaDesdeModal() {
     var modal = document.getElementById('modal-nombre-archivo');
     var input = document.getElementById('input-nombre-archivo');
     var nombrePagina = (input.value || '').trim() || 'proforma_guardada';
-    var nombreCliente = document.getElementById('nombreCliente').value || "";
+    var nombreCliente = (document.getElementById('nombreCliente').value || '').trim() || "CONSUMIDOR FINAL";
     var nombreVendedor = document.getElementById('nombreVendedorDisplay').innerText || "";
 
     // Clona el documento y elimina el modal ANTES de guardar
@@ -1255,6 +1255,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Escribir el nombre del vendedor en la proforma
         vendedorDisplay.innerText = vendedor;
 
+        // Si el nombre del cliente está vacío, poner "CONSUMIDOR FINAL" para la imagen
+        const clienteInput = document.getElementById('nombreCliente');
+        const originalClienteValue = clienteInput.value;
+        if (!clienteInput.value.trim()) {
+            clienteInput.value = "CONSUMIDOR FINAL";
+        }
+
         // Elementos a ocultar y el contenedor de la proforma
         const ocultar = document.querySelectorAll('.no-imagen');
         const proforma = document.getElementById("proforma");
@@ -1302,6 +1309,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Limpiar y restaurar la vista original
                 vendedorDisplay.innerText = "";
+                clienteInput.value = originalClienteValue; // Restaurar el valor original del cliente
                 ocultar.forEach(el => el.style.display = ''); // Usar '' para restaurar el display por defecto
                 proforma.style.cssText = originalProformaStyle; // Restaurar estilos originales
             }).catch(err => {
