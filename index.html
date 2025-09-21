@@ -479,6 +479,7 @@
             cursor: ew-resize; /* Cursor para indicar scroll horizontal */
             transition: background-color 0.2s ease;
             flex-grow: 1; /* Ocupa el espacio disponible */
+            box-shadow: 0 0 0 1px #fff, 0 0 6px rgba(255,255,255,0.7); /* Borde blanco y resplandor */
         }
         #cantidad-scrollbar.scrolling {
             background-color: #ffc107; /* Amarillo/Naranja al usarla */
@@ -552,8 +553,8 @@
                                     </div>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%;">
-                                    <label for="cantidad" style="text-shadow: 0 0 7px rgba(255,255,255,0.9);">CANTIDAD:</label>
-                                    <input type="number" id="cantidad" placeholder="Cantidad" min="1" value="1" style="width: 80px; font-size: 16px; text-align: center; margin-bottom: 0;">
+                                    <label for="cantidad" style="font-size: 15px; font-weight: bold; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 6px rgba(255,255,255,0.8);">CANT.</label>
+                                    <input type="number" id="cantidad" placeholder="Cant." min="1" value="1" style="width: 65px; font-size: 16px; text-align: center; margin-bottom: 0;">
                                     <div id="cantidad-scrollbar" title="Use la rueda del ratón o deslice para cambiar la cantidad"></div>
                                 </div>
                             </div>
@@ -1899,12 +1900,11 @@ document.addEventListener('DOMContentLoaded', function() {
             <button id="open-inventory-btn" class="proforma-action-btn btn-azul" onclick="openInventory()" title="Inventario">📦 Inventario</button>
             <button id="open-saved-inventory-btn" class="proforma-action-btn" style="background:#6c757d;color:#fff;" onclick="openSavedInventory()" title="Abrir inventario guardado">📂 Abrir guardado</button>
         </div>
-        <div id="inventory-save-info" style="font-size:12px;color:#444;margin-top:6px;"> </div>
     </div>
 
 <!-- Acceso a inventario (bloque separado) -->
     <div class="no-imagen" style="margin:8px 0 0 0; text-align:left; max-width:520px; display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
-        <label style="font-weight:bold;">Base de datos</label>
+        <label style="font-weight:bold; font-size: 15px; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 6px rgba(255,255,255,0.8);">Base de datos</label>
         <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
             <input type="password" id="password" placeholder="Ingresa la contraseña">
             <button id="accederBtn" class="action-button btn-verde" onclick="verificarPassword()">Acceder</button>
