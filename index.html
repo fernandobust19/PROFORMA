@@ -488,6 +488,21 @@
             background-color: #ffc107; /* Amarillo/Naranja al usarla */
         }
 
+        /* Borde con gradiente para los campos de producto y precio */
+        #nombreProducto, #precioProducto {
+            border: 2px solid transparent; /* Borde más grueso y transparente */
+            background: linear-gradient(white, white) padding-box,
+                        linear-gradient(to right, #8b5cf6, #ffca7a) border-box;
+            /* Esta técnica asegura que el gradiente respete las esquinas redondeadas */
+        }
+
+        /* Mantener el borde con gradiente en el foco y añadir el brillo */
+        #nombreProducto:focus, #precioProducto:focus {
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06), 0 0 0 3px rgba(139, 92, 246, 0.2); /* Sombra violeta */
+            /* La animación de borde se desactiva para no interferir con el gradiente */
+            animation: none;
+        }
+
     </style>
 </head>
 
@@ -1503,8 +1518,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const valorSeleccionado = selectProducto.value;
 
             // Limpiar campos después de agregar
-            document.getElementById("nombreProducto").value = "";
-            document.getElementById("precioProducto").value = "";
             document.getElementById("cantidad").value = "1";
             
             // Restablecer la lista de productos y mantener la selección anterior
