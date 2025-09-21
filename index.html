@@ -299,6 +299,7 @@
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
+        transform: scale(1.05); /* Acerca la imagen para evitar deformaciones en móviles */
     }
     .panel-translucido {
         background: rgba(255, 255, 255, 0.90); /* Un poco más opaco para legibilidad */
@@ -1288,6 +1289,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentBackgroundIndex = 0;
             }
             backgroundContainer.style.backgroundImage = `url('${backgrounds[currentBackgroundIndex]}')`;
+            localStorage.setItem('backgroundIndex', currentBackgroundIndex); // Guardar la elección
         }
 
         // Aplicar el fondo inicial al cargar la página
