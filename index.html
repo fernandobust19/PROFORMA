@@ -521,7 +521,7 @@
                             </div>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
-                                    <img src="logo.png" alt="Up-cons logo" style="height:40px;vertical-align:middle;display:inline-block;">
+                                    <img src="logo.png" alt="Up-cons logo" style="height:50px;vertical-align:middle;display:inline-block;">
                                 </div>
                                 <div style="font-size:11px; color:#111;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
                                     Sucursal. Av Mariscal Sucre y Arturo Tipanguano <br> Telf: 0983801298 - 0995986366</div>
@@ -1264,7 +1264,10 @@ document.addEventListener('DOMContentLoaded', function() {
             'giphy.webp',
             'giphy1.webp',
             'fondo4.jpg',
-            'fondo5.jpg'
+            'fondo5.jpg',
+            'fondo6.jpg',
+            'fondo7.jpg',
+            'fondo8.jpg'
         ];
         
         // Obtener el índice guardado, o usar 0 por defecto
@@ -1277,6 +1280,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentBackgroundIndex = 0;
             }
             body.style.backgroundImage = `url('${backgrounds[currentBackgroundIndex]}')`;
+            body.style.backgroundAttachment = 'fixed'; // Asegura que el fondo no se mueva con el scroll
             localStorage.setItem('backgroundIndex', currentBackgroundIndex); // Guardar la elección
         }
 
