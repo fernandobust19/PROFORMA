@@ -52,10 +52,6 @@
     display: inline-block;
 }
 
-#calculator-btn:hover { 
-    transform: translateY(-1px);
-}
-
 #calculator-btn.dragging {
     transform: scale(1.02);
 }
@@ -68,7 +64,7 @@
 /* Estilo de la calculadora (neon) */
 #calculator {
     position: fixed;
-    top: 70px;
+    top: 85px; /* Más abajo */
     right: 10px;
     width: 260px;
     background: var(--neon-panel);
@@ -541,7 +537,7 @@
                 <div style="position:relative;min-height:54px;margin-bottom:8px;">
                     <img id="main-title" src="logo.png" alt="UP-CONS IMPORTADOR - Clic para cambiar fondo" title="Clic para cambiar fondo">
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;width:92px;height:92px;" />
-                    <!-- Título y calculadora solo una vez -->
+                    <!-- Contenido principal -->
                     <div class="main-sections-container">
                         <!-- Sección Proforma -->
                         <div class="proforma-section">
@@ -1519,10 +1515,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Limpiar campos después de agregar
             document.getElementById("cantidad").value = "1";
-            
-            // Restablecer la lista de productos y mantener la selección anterior
-            buscarProducto();
-            selectProducto.value = valorSeleccionado;
         } else {
             alert("Por favor, ingrese un nombre y un precio válido.");
         }
