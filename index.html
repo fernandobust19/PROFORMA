@@ -1797,51 +1797,85 @@ function calculateResult() {
 </script>
 
 <script>
-// Lógica para el control de cantidad con rueda de ratón y vibración
+// Lógica para el control de cantidad con rueda de ratón, arrastre y vibración
 document.addEventListener('DOMContentLoaded', function() {
     const cantidadInput = document.getElementById('cantidad');
     const scrollbar = document.getElementById('cantidad-scrollbar');
+    let scrollbarTimeout;
 
-    // Función centralizada para manejar el cambio de cantidad
-    function handleQuantityChange(event) {
-        // Prevenir el comportamiento por defecto (scroll de la página)
-        event.preventDefault();
+    if (!cantidadInput || !scrollbar) return;
 
-        // Obtener valor actual, o 1 si está vacío
-        let currentValue = parseInt(cantidadInput.value, 10) || 1;
-        const min = parseInt(cantidadInput.min, 10) || 1;
-
-        // Incrementar o decrementar según la dirección de la rueda
-        if (event.deltaY < 0 || event.deltaX < 0) {
-            currentValue++; // Rueda hacia arriba
-        } else {
-            currentValue--; // Rueda hacia abajo
-        }
-
-        // Asegurar que el valor no sea menor que el mínimo permitido
-        cantidadInput.value = Math.max(min, currentValue);
-
-        // Vibrar en dispositivos compatibles
+    // --- Funciones de utilidad ---
+    function triggerFeedback() {
         if (navigator.vibrate) {
             navigator.vibrate(50); // Vibración corta de 50ms
         }
+        scrollbar.classList.add('scrolling');
+        clearTimeout(scrollbarTimeout);
+        scrollbarTimeout = setTimeout(() => {
+            scrollbar.classList.remove('scrolling');
+        }, 300);
+    }
 
-        // Cambiar color de la barra de scroll visual y luego revertirlo
-        if (scrollbar) {
-            scrollbar.classList.add('scrolling');
-            setTimeout(() => {
-                scrollbar.classList.remove('scrolling');
-            }, 300); // El color vuelve a la normalidad después de 300ms
+    function incrementQuantity() {
+        const min = parseInt(cantidadInput.min, 10) || 1;
+        let currentValue = parseInt(cantidadInput.value, 10) || (min - 1);
+        cantidadInput.value = currentValue + 1;
+        triggerFeedback();
+    }
+
+    function decrementQuantity() {
+        const min = parseInt(cantidadInput.min, 10) || 1;
+        let currentValue = parseInt(cantidadInput.value, 10) || 1;
+        cantidadInput.value = Math.max(min, currentValue - 1);
+        triggerFeedback();
+    }
+
+    // --- Lógica para Rueda del Ratón (Wheel) ---
+    function handleWheel(event) {
+        event.preventDefault();
+        if (event.deltaY < 0 || event.deltaX < 0) {
+            incrementQuantity();
+        } else {
+            decrementQuantity();
+        }
+    }
+    cantidadInput.addEventListener('wheel', handleWheel);
+    scrollbar.addEventListener('wheel', handleWheel);
+
+    // --- Lógica para Arrastrar (Drag & Touch) ---
+    let isDragging = false;
+    let startX = 0;
+    const dragThreshold = 25; // Píxeles de arrastre para cambiar la cantidad
+
+    function handleDragStart(event) {
+        isDragging = true;
+        startX = event.pageX || event.touches[0].pageX;
+        scrollbar.classList.add('scrolling');
+        event.preventDefault();
+    }
+
+    function handleDragMove(event) {
+        if (!isDragging) return;
+        event.preventDefault();
+        const currentX = event.pageX || event.touches[0].pageX;
+        const deltaX = currentX - startX;
+
+        if (Math.abs(deltaX) > dragThreshold) {
+            if (deltaX > 0) { incrementQuantity(); } 
+            else { decrementQuantity(); }
+            startX = currentX; // Reiniciar para un arrastre continuo
         }
     }
 
-    // Asignar el evento tanto al input como a la barra visual
-    if (cantidadInput) {
-        cantidadInput.addEventListener('wheel', handleQuantityChange);
-    }
-    if (scrollbar) {
-        scrollbar.addEventListener('wheel', handleQuantityChange);
-    }
+    function handleDragEnd() { isDragging = false; }
+
+    scrollbar.addEventListener('mousedown', handleDragStart);
+    scrollbar.addEventListener('touchstart', handleDragStart, { passive: false });
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('mouseup', handleDragEnd);
+    document.addEventListener('touchend', handleDragEnd);
 });
 </script>
 
