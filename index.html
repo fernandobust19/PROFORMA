@@ -287,21 +287,18 @@
         margin: 0;
         padding: 20px;
         font-size: 12px;
-        height: 150%;
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch;
+        min-height: 100vh;
     }
     .background-container {
         position: fixed;
         top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
+        right: 0;
+        bottom: 0;
         z-index: -1; /* Detrás de todo el contenido */
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        background-attachment: fixed; /* Doble seguridad */
     }
     .panel-translucido {
         background: rgba(255, 255, 255, 0.90); /* Un poco más opaco para legibilidad */
@@ -1291,7 +1288,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentBackgroundIndex = 0;
             }
             backgroundContainer.style.backgroundImage = `url('${backgrounds[currentBackgroundIndex]}')`;
-            localStorage.setItem('backgroundIndex', currentBackgroundIndex); // Guardar la elección
         }
 
         // Aplicar el fondo inicial al cargar la página
