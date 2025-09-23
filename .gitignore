@@ -1,0 +1,16 @@
+# Build artifacts and temporary files
+proforma-offline/
+proforma-offline.zip
+libs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
