@@ -240,6 +240,7 @@
         height: 40px;
         padding: 8px 14px;
         border-radius: 10px;
+        font-size: 13px; /* Tamaño de fuente reducido para mejor ajuste */
         font-weight: 700;
         display: inline-flex;
         align-items: center;
@@ -590,6 +591,12 @@
     }
     #inventory-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #aaa; }
 
+    /* Estilo para diferenciar campos de cantidad en inventario */
+    #outputs-list input[type="number"] {
+        background-color: #e6e6fa; /* Lila claro */
+        color: #102035; /* Texto negro */
+    }
+
     </style>
 </head>
 
@@ -719,8 +726,8 @@
                                         <div style="display:flex;gap:8px;align-items:center;">
                                             <button id="add-new-inventory-item-btn" class="inventory-action-btn" style="background:#06d6a0;color:#fff;min-width:50px;" onclick="addNewInventoryRow()" title="Añadir nuevo producto">+</button>
                                             <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
-                                            <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">🗑️ Borrar borrador</button>
-                                            <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">💾 Guardar y Cerrar</button>
+                                            <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">Borrar borrador</button>
+                                            <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">Guardar y Cerrar</button>
                                         </div>
                                     </div>
                                 </div>
@@ -975,6 +982,8 @@ function loadProductsForInventory() {
         qtyInput.type = 'number';
         qtyInput.min = '0';
         qtyInput.value = '';
+        qtyInput.dataset.grossValue = ''; // Almacena la entrada bruta
+        qtyInput.id = `entrada-input-${idx}`; // ID para vincular
         qtyInput.style.width = '90px';
         qtyInput.style.marginLeft = '12px';
         qtyInput.dataset.productName = opt.text;
@@ -999,26 +1008,35 @@ function loadProductsForInventory() {
         const qtyInputSalida = document.createElement('input');
         qtyInputSalida.type = 'number';
         qtyInputSalida.min = '0';
+        qtyInputSalida.id = `salida-input-${idx}`; // ID para vincular
         qtyInputSalida.style.width = '90px';
         qtyInputSalida.style.marginLeft = '12px';
         qtyInputSalida.dataset.productName = opt.text;
-        qtyInputSalida.id = `output-input-${idx}`;
 
         // Reemplazar el contenedor de input por el input de salida simple
         rowSalida.replaceChild(qtyInputSalida, rowSalida.querySelector('div:last-child'));
         outputsList.appendChild(rowSalida);
 
         // --- Eventos y Lógica ---
-        qtyInput.addEventListener('input', autosaveInventoryDraft);
+        qtyInput.addEventListener('input', (e) => {
+            // Guardar el valor bruto que el usuario escribe
+            e.target.dataset.grossValue = e.target.value;
+            autosaveInventoryDraft();
+            // Re-aplicar la resta con el nuevo valor de entrada
+            const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+            const entradaBruta = parseFloat(e.target.dataset.grossValue) || 0;
+            const resultado = entradaBruta - salidaValue;
+            e.target.value = resultado === 0 ? '' : resultado;
+        });
+        
         qtyInputSalida.addEventListener('input', () => {
             autosaveOutputsDraft();
-            // Actualizar el indicador en la otra pestaña
-            const salidaValue = qtyInputSalida.value;
-            if (salidaValue && salidaValue !== '0') {
-                outputIndicator.textContent = `-${salidaValue}`;
-            } else {
-                outputIndicator.textContent = '';
-            }
+            const entradaBruta = parseFloat(qtyInput.dataset.grossValue) || 0;
+            const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+            const resultado = entradaBruta - salidaValue;
+            // Actualizar el valor visible de la entrada y el indicador
+            qtyInput.value = resultado === 0 ? '' : resultado;
+            outputIndicator.textContent = (salidaValue > 0) ? `-${salidaValue}` : '';
         });
     });
 
@@ -1047,6 +1065,8 @@ function addNewInventoryRow() {
     qtyInputEntrada.type = 'number';
     qtyInputEntrada.min = '0';
     qtyInputEntrada.placeholder = 'Cant.';
+    qtyInputEntrada.dataset.grossValue = ''; // Almacena la entrada bruta
+    qtyInputEntrada.id = `entrada-input-${newId}`; // ID para vincular
     qtyInputEntrada.style.cssText = 'width: 90px; margin-left: 12px;';
 
     const inputContainer = document.createElement('div');
@@ -1065,12 +1085,13 @@ function addNewInventoryRow() {
     const rowSalida = rowEntrada.cloneNode(true);
     const nameInputSalida = rowSalida.querySelector('.custom-product-name');
     nameInputSalida.readOnly = true; // El nombre se sincroniza desde la pestaña de entradas
-    nameInputSalida.style.backgroundColor = '#f8f8f8'; // Indicar que no es editable
+    nameInputSalida.style.cssText += 'background-color: #f8f8f8; color: #102035;'; // Indicar que no es editable y forzar texto negro
 
     const qtyInputSalida = document.createElement('input');
     qtyInputSalida.type = 'number';
     qtyInputSalida.min = '0';
     qtyInputSalida.placeholder = 'Cant.';
+    qtyInputSalida.id = `salida-input-${newId}`; // ID para vincular
     qtyInputSalida.style.cssText = 'width: 90px; margin-left: 12px;';
 
     rowSalida.replaceChild(qtyInputSalida, rowSalida.querySelector('div:last-child'));
@@ -1081,11 +1102,22 @@ function addNewInventoryRow() {
         nameInputSalida.value = nameInputEntrada.value; // Sincronizar nombres
         autosaveInventoryDraft();
     });
-    qtyInputEntrada.addEventListener('input', autosaveInventoryDraft);
+    qtyInputEntrada.addEventListener('input', (e) => {
+        e.target.dataset.grossValue = e.target.value;
+        autosaveInventoryDraft();
+        const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+        const entradaBruta = parseFloat(e.target.dataset.grossValue) || 0;
+        const resultado = entradaBruta - salidaValue;
+        e.target.value = resultado === 0 ? '' : resultado;
+    });
+
     qtyInputSalida.addEventListener('input', () => {
         autosaveOutputsDraft();
-        const salidaValue = qtyInputSalida.value;
-        outputIndicator.textContent = (salidaValue && salidaValue !== '0') ? `-${salidaValue}` : '';
+        const entradaBruta = parseFloat(qtyInputEntrada.dataset.grossValue) || 0;
+        const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+        const resultado = entradaBruta - salidaValue;
+        outputIndicator.textContent = (salidaValue > 0) ? `-${salidaValue}` : '';
+        qtyInputEntrada.value = resultado === 0 ? '' : resultado;
     });
 
     nameInputEntrada.focus(); // Poner el foco en el nuevo campo de nombre
@@ -1264,8 +1296,13 @@ function collectInventoryData() {
         else if (nameDiv) name = nameDiv.textContent.trim();
         if (!name) return; // No guardar filas personalizadas sin nombre
 
-        let qty = r.querySelector('input').value;
-        if (qty === '' || qty === null || qty === undefined) qty = '0';
+        const input = r.querySelector('input[type="number"]');
+        // Para las entradas, guardamos el valor bruto, no el calculado
+        let qty = input.dataset.grossValue; 
+        if (qty === undefined) { // Si no tiene dataset (es una fila de salida)
+            qty = input.value;
+        }
+        if (qty === null || qty === undefined) qty = ''; // Guardar vacío como vacío
         out[name] = qty;
     });
     return out;
@@ -1283,7 +1320,7 @@ function collectOutputsData() {
         if (!name) return;
 
         let qty = r.querySelector('input').value;
-        if (qty === '' || qty === null || qty === undefined) qty = '0';
+        if (qty === null || qty === undefined) qty = ''; // Guardar vacío como vacío
         out[name] = qty;
     });
     return out;
@@ -1309,7 +1346,12 @@ function restoreInventoryDraft() {
             else if (nameDiv) name = nameDiv.textContent.trim();
             if (!name) return;
 
-            if (draft[name] !== undefined) r.querySelector('input').value = draft[name];
+            const savedValue = draft[name];
+            if (savedValue !== undefined) {
+                const input = r.querySelector('input[type="number"]');
+                input.value = savedValue === '0' ? '' : savedValue;
+                input.dataset.grossValue = savedValue === '0' ? '' : savedValue; // Restaurar también el valor bruto
+            }
         });
     } catch (e) { /* ignore */ }
 }
@@ -1325,7 +1367,7 @@ function restoreOutputsDraft() {
     try {
         const draft = JSON.parse(draftRaw);
         const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
-        rows.forEach((r, idx) => {
+        rows.forEach(r => {
             let name = '';
             const nameDiv = r.querySelector('div:not([style*="display: flex"])');
             const nameInput = r.querySelector('input[type="text"]');
@@ -1333,13 +1375,24 @@ function restoreOutputsDraft() {
             else if (nameDiv) name = nameDiv.textContent.trim();
             if (!name) return;
 
+            const salidaInput = r.querySelector('input[type="number"]');
+            const idx = salidaInput.id.split('-').pop();
+            const entradaInput = document.getElementById(`entrada-input-${idx}`);
+            if (!entradaInput) return;
+
             const outputIndicator = document.getElementById(`output-indicator-${idx}`);
-            if (draft[name] !== undefined) {
+            const savedValue = draft[name];
+            if (savedValue !== undefined) {
                 const input = r.querySelector('input');
-                input.value = draft[name];
+                input.value = savedValue === '0' ? '' : savedValue;
                 // Actualizar indicador visual en la otra pestaña
-                if (draft[name] && draft[name] !== '0' && outputIndicator) {
-                    outputIndicator.textContent = `-${draft[name]}`;
+                if (input.value && input.value !== '0' && outputIndicator) {
+                    const salidaValue = parseFloat(input.value) || 0;
+                    outputIndicator.textContent = `-${salidaValue}`;
+                    // Realizar la resta visual al restaurar, usando el valor bruto
+                    const entradaBruta = parseFloat(entradaInput.dataset.grossValue) || 0;
+                    const resultado = entradaBruta - salidaValue;
+                    entradaInput.value = resultado === 0 ? '' : resultado;
                 }
             }
         });
@@ -1385,6 +1438,49 @@ function updateInventoryButtonState() {
 
 // actualizar estado del botón al cargar la página
 window.addEventListener('DOMContentLoaded', updateInventoryButtonState);
+
+// Exponer funciones al scope global para los `onclick` del HTML
+window.openInventory = openInventory;
+window.openSavedInventory = openSavedInventory;
+window.verificarPassword = verificarPassword;
+
+function verificarPassword() {
+    const password = document.getElementById("password").value;
+    const passwordCorrecta = "5555";  // Contraseña correcta
+    const boton = document.getElementById("accederBtn");
+    const mensaje = document.getElementById("mensaje");
+
+    // Restablece el estilo del botón
+    boton.style.backgroundColor = "";
+    boton.style.transform = "";
+    mensaje.style.display = "none";
+
+    if (password === passwordCorrecta) {
+        // Efecto de botón presionado (cambio de color y hundimiento)
+        boton.style.backgroundColor = "#28a745"; // Verde
+        boton.style.transform = "translateY(2px)";
+        boton.innerHTML = "Accediendo...";
+
+        // Redirige a la hoja de cálculo en una nueva pestaña después de un pequeño retraso
+        setTimeout(() => {
+            window.open("https://docs.google.com/spreadsheets/d/1lm9rsOQw57roxDV4RKGORSEzWRmGa6je5AR_G8R7vHs/edit?usp=drivesdk", "_blank");
+            boton.innerHTML = "Acceder";  // Restablece el texto del botón
+            boton.style.backgroundColor = "";
+            boton.style.transform = "";
+        }, 500);
+    } else {
+        // Si la contraseña es incorrecta, muestra el mensaje de error y un efecto de "hundimiento"
+        boton.style.backgroundColor = "#dc3545"; // Rojo
+        boton.style.transform = "translateY(2px)";
+        mensaje.style.display = "block";  // Muestra el mensaje de error
+
+        // Restablece el efecto de hundimiento después de un breve período
+        setTimeout(() => {
+            boton.style.transform = "";
+            boton.style.backgroundColor = "";
+        }, 400);
+    }
+}
 
 // Nota: para guardar directamente en Google Sheets necesitarás un endpoint (Google Apps Script)
 </script>
@@ -2238,46 +2334,6 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
     </div>
-
-<script>
-    function verificarPassword() {
-        const password = document.getElementById("password").value;
-        const passwordCorrecta = "5555";  // Contraseña correcta
-        const boton = document.getElementById("accederBtn");
-        const mensaje = document.getElementById("mensaje");
-
-        // Restablece el estilo del botón
-        boton.style.backgroundColor = "";
-        boton.style.transform = "";
-        mensaje.style.display = "none";
-
-        if (password === passwordCorrecta) {
-            // Efecto de botón presionado (cambio de color y hundimiento)
-            boton.style.backgroundColor = "#28a745"; // Verde
-            boton.style.transform = "translateY(2px)";
-            boton.innerHTML = "Accediendo...";
-
-            // Redirige a la hoja de cálculo en una nueva pestaña después de un pequeño retraso
-            setTimeout(() => {
-                window.open("https://docs.google.com/spreadsheets/d/1lm9rsOQw57roxDV4RKGORSEzWRmGa6je5AR_G8R7vHs/edit?usp=drivesdk", "_blank");
-                boton.innerHTML = "Acceder";  // Restablece el texto del botón
-                boton.style.backgroundColor = "";
-                boton.style.transform = "";
-            }, 500);
-        } else {
-            // Si la contraseña es incorrecta, muestra el mensaje de error y un efecto de "hundimiento"
-            boton.style.backgroundColor = "#dc3545"; // Rojo
-            boton.style.transform = "translateY(2px)";
-            mensaje.style.display = "block";  // Muestra el mensaje de error
-
-            // Restablece el efecto de hundimiento después de un breve período
-            setTimeout(() => {
-                boton.style.transform = "";
-                boton.style.backgroundColor = "";
-            }, 400);
-        }
-    }
-</script>
 
 <script>
     // Lógica para alternar entre tema claro (beige) y oscuro (negro)
