@@ -556,6 +556,33 @@
         border-bottom-color: #f0f0f0 !important;
     }
     .dark-theme #inventory-view h3 { color: var(--neon-text); }
+
+    /* Estilos para las pestañas del inventario */
+    .inventory-tabs {
+        display: flex;
+        border-bottom: 1px solid #ccc;
+        margin-bottom: 10px;
+    }
+    .inventory-tab {
+        padding: 10px 15px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-bottom: -1px;
+        font-weight: 600;
+        color: #555;
+    }
+    .inventory-tab.active {
+        border-color: #ccc;
+        border-bottom: 1px solid white;
+        border-radius: 5px 5px 0 0;
+        color: #000;
+        background-color: white;
+    }
+    .inventory-tab-content { display: none; }
+    .inventory-tab-content.active { display: block; }
+    .output-indicator { color: #d9534f; font-weight: bold; margin-left: 5px; font-size: 13px; }
+
     </style>
 </head>
 
@@ -661,11 +688,20 @@
                                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
                                         <h3 style="margin:0;">Inventario de Productos</h3>
                                         <div style="display:flex;gap:8px;">
-                                            <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar PDF</button>
+                                            <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar Inventario</button>
                                         </div>
                                     </div>
-                                    <div id="inventory-list" style="max-height:60vh;overflow:auto;border-top:1px solid #eee;padding-top:8px;">
-                                        <!-- Filas de producto se insertarán aquí -->
+                                    <!-- Pestañas de Inventario y Salidas -->
+                                    <div class="inventory-tabs">
+                                        <div class="inventory-tab active" onclick="switchInventoryTab('entradas')">INVENTARIO (ENTRADAS)</div>
+                                        <div class="inventory-tab" onclick="switchInventoryTab('salidas')">SALIDAS</div>
+                                    </div>
+                                    <!-- Contenido de las pestañas -->
+                                    <div id="tab-content-entradas" class="inventory-tab-content active">
+                                        <div id="inventory-list" style="max-height:55vh;overflow:auto;padding-top:8px;"></div>
+                                    </div>
+                                    <div id="tab-content-salidas" class="inventory-tab-content">
+                                        <div id="outputs-list" style="max-height:55vh;overflow:auto;padding-top:8px;"></div>
                                     </div>
                                     <div class="inventory-footer">
                                         <div style="display:flex;gap:8px;align-items:center;">
@@ -693,6 +729,8 @@ mostrarFechaProforma();
 // ----- INVENTARIO: funciones para manejar la vista y exportación -----
 function openInventory() {
     document.getElementById('inventory-modal').style.display = 'flex';
+    // Asegurarse de que la pestaña de entradas esté activa por defecto
+    switchInventoryTab('entradas');
     // cargar productos desde el select #producto si está disponible
     loadProductsForInventory();
     // restaurar borrador si existe
@@ -709,15 +747,18 @@ function closeInventory() {
 function saveInventoryAndClose() {
     // Al guardar, pedimos un nombre para el inventario y lo guardamos en el registro de inventarios guardados
     const draft = collectInventoryData();
+    const salidas = collectOutputsData();
     // Si no hay datos, avisar
-    const entries = Object.entries(draft).filter(([,v]) => v !== '' && v !== '0' && v !== null && v !== undefined);
-    if (entries.length === 0) return alert('No hay cantidades registradas para guardar.');
+    const entriesEntradas = Object.values(draft).some(v => v && v !== '0');
+    const entriesSalidas = Object.values(salidas).some(v => v && v !== '0');
+    if (!entriesEntradas && !entriesSalidas) return alert('No hay cantidades registradas para guardar.');
     // mostrar modal para nombrar
     showInventoryNameModal(async function(nombre) {
         if (!nombre) nombre = 'inventario_' + new Date().toISOString();
         // cargar inventarios existentes
         const lista = getSavedInventories();
-        lista.push({ name: nombre, savedAt: new Date().toISOString(), data: draft });
+        // Guardar tanto entradas como salidas
+        lista.push({ name: nombre, savedAt: new Date().toISOString(), data: draft, salidas: salidas });
         setSavedInventories(lista);
         // mantener compatibilidad: guardar también como inventario_final y meta
         localStorage.setItem('inventario_final', JSON.stringify(draft));
@@ -725,6 +766,7 @@ function saveInventoryAndClose() {
         localStorage.setItem('inventario_final_meta', JSON.stringify(meta));
         // limpiar borrador temporal
         localStorage.removeItem('inventario_draft');
+        localStorage.removeItem('salidas_draft');
         // cerrar modal principal
         document.getElementById('inventory-modal').style.display = 'none';
         window.removeEventListener('beforeunload', preventUnload);
@@ -841,15 +883,19 @@ function loadNamedInventory(index) {
     if (!list || !list[index]) return alert('Inventario no encontrado.');
     const item = list[index];
     const data = item.data || {};
+    const salidas = item.salidas || {};
     // abrir modal principal y poblar
     document.getElementById('inventory-modal').style.display = 'flex';
     loadProductsForInventory();
     setTimeout(() => {
-        const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
-        rows.forEach(r => {
+        Array.from(document.querySelectorAll('#inventory-list > div')).forEach(r => {
             const name = r.querySelector('div').textContent.trim();
             if (data[name] !== undefined) r.querySelector('input').value = data[name];
             else r.querySelector('input').value = '';
+        });
+        Array.from(document.querySelectorAll('#outputs-list > div')).forEach(r => {
+            const name = r.querySelector('div').textContent.trim();
+            if (salidas[name] !== undefined) r.querySelector('input').value = salidas[name];
         });
         window.addEventListener('beforeunload', preventUnload);
     }, 120);
@@ -883,10 +929,14 @@ function preventUnload(e) {
 
 function loadProductsForInventory() {
     const inventoryList = document.getElementById('inventory-list');
+    const outputsList = document.getElementById('outputs-list');
     inventoryList.innerHTML = '';
+    outputsList.innerHTML = '';
+
     const select = document.getElementById('producto');
     if (!select) {
-        inventoryList.innerHTML = '<p>No se encontró la lista de productos.</p>';
+        const errorMsg = '<p>No se encontró la lista de productos.</p>';
+        inventoryList.innerHTML = errorMsg; outputsList.innerHTML = errorMsg;
         return;
     }
     // recorrer las opciones del select y crear filas
@@ -904,33 +954,72 @@ function loadProductsForInventory() {
         nameDiv.style.fontSize = '14px';
         nameDiv.textContent = opt.text.replace(/\s*-\s*\$[0-9.,]+$/, ''); // quita el precio si existe
 
-    const qtyInput = document.createElement('input');
-    qtyInput.type = 'number';
-    qtyInput.min = '0';
-    qtyInput.value = '';
+        // --- Fila para INVENTARIO (ENTRADAS) ---
+        const qtyInput = document.createElement('input');
+        qtyInput.type = 'number';
+        qtyInput.min = '0';
+        qtyInput.value = '';
         qtyInput.style.width = '90px';
         qtyInput.style.marginLeft = '12px';
         qtyInput.dataset.productName = opt.text;
 
-        // Restaurar valor desde draft si existe
-        const draftRaw = localStorage.getItem('inventario_draft');
-        if (draftRaw) {
-            try {
-                const draft = JSON.parse(draftRaw);
-                const nameKey = nameDiv.textContent.trim();
-                if (draft[nameKey] !== undefined) qtyInput.value = draft[nameKey];
-            } catch (e) { /* ignore */ }
-        }
+        // Contenedor para input y el indicador de salida
+        const inputContainer = document.createElement('div');
+        inputContainer.style.display = 'flex';
+        inputContainer.style.alignItems = 'center';
+        const outputIndicator = document.createElement('span');
+        outputIndicator.className = 'output-indicator';
+        outputIndicator.id = `output-indicator-${idx}`;
 
-        // Guardado automático al cambiar
-        qtyInput.addEventListener('input', () => {
-            autosaveInventoryDraft();
-        });
-
+        inputContainer.appendChild(qtyInput);
+        inputContainer.appendChild(outputIndicator);
         row.appendChild(nameDiv);
-        row.appendChild(qtyInput);
+        row.appendChild(inputContainer);
         inventoryList.appendChild(row);
+
+        // --- Fila para SALIDAS ---
+        const rowSalida = row.cloneNode(true); // Clonar la estructura
+        const nameDivSalida = rowSalida.querySelector('div');
+        const qtyInputSalida = document.createElement('input');
+        qtyInputSalida.type = 'number';
+        qtyInputSalida.min = '0';
+        qtyInputSalida.style.width = '90px';
+        qtyInputSalida.style.marginLeft = '12px';
+        qtyInputSalida.dataset.productName = opt.text;
+        qtyInputSalida.id = `output-input-${idx}`;
+
+        // Reemplazar el contenedor de input por el input de salida simple
+        rowSalida.replaceChild(qtyInputSalida, rowSalida.querySelector('div:last-child'));
+        outputsList.appendChild(rowSalida);
+
+        // --- Eventos y Lógica ---
+        qtyInput.addEventListener('input', autosaveInventoryDraft);
+        qtyInputSalida.addEventListener('input', () => {
+            autosaveOutputsDraft();
+            // Actualizar el indicador en la otra pestaña
+            const salidaValue = qtyInputSalida.value;
+            if (salidaValue && salidaValue !== '0') {
+                outputIndicator.textContent = `-${salidaValue}`;
+            } else {
+                outputIndicator.textContent = '';
+            }
+        });
     });
+
+    // Restaurar borradores después de crear todos los elementos
+    restoreInventoryDraft();
+    restoreOutputsDraft();
+}
+
+function switchInventoryTab(tabName) {
+    // Ocultar todos los contenidos
+    document.querySelectorAll('.inventory-tab-content').forEach(content => content.classList.remove('active'));
+    // Quitar 'active' de todas las pestañas
+    document.querySelectorAll('.inventory-tab').forEach(tab => tab.classList.remove('active'));
+
+    // Activar la pestaña y contenido correctos
+    document.getElementById(`tab-content-${tabName}`).classList.add('active');
+    document.querySelector(`.inventory-tab[onclick="switchInventoryTab('${tabName}')"]`).classList.add('active');
 }
 
 function downloadInventoryCSV() {
@@ -939,7 +1028,8 @@ function downloadInventoryCSV() {
 
 async function saveInventoryPDF() {
     // Cuando el usuario pide exportar PDF, pedimos un nombre y guardamos igual que "Guardar y Cerrar".
-    const data = collectInventoryData();
+    const data = collectInventoryData(); // Entradas
+    const salidas = collectOutputsData(); // Salidas
     const entries = Object.entries(data);
     if (entries.length === 0) return alert('No hay datos para exportar.');
 
@@ -958,10 +1048,12 @@ async function saveInventoryPDF() {
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 12;
         const usableWidth = pageWidth - margin * 2;
-        const colQtyWidth = 30; // mm for quantity column
-        const colNameWidth = usableWidth - colQtyWidth - 6; // small gap
+        const colQtyWidth = 25; // mm para columnas de cantidad
+        const colNameWidth = usableWidth - (colQtyWidth * 2) - 8; // Ancho para nombre
         const lineHeight = 8;
         let y = 18;
+
+        // ... (resto del código de PDF)
 
         doc.setFontSize(14);
         doc.text('Inventario de Productos', margin, y);
@@ -977,24 +1069,33 @@ async function saveInventoryPDF() {
         doc.rect(margin, y, usableWidth, lineHeight, 'F');
         doc.setTextColor(20,20,20);
         doc.text('Producto', margin + 3, y + 6);
-        doc.text('Cantidad', margin + usableWidth - colQtyWidth + 6, y + 6);
+        doc.text('Entrada', margin + colNameWidth + 4, y + 6);
+        doc.text('Salida', margin + colNameWidth + colQtyWidth + 4, y + 6);
         y += lineHeight;
         doc.setDrawColor(200);
         doc.setLineWidth(0.4);
         doc.line(margin, y, margin + usableWidth, y);
 
         // filas
-        entries.forEach(([name, qty], idx) => {
+        entries.forEach(([name, entradaQty], idx) => {
+            const salidaQty = salidas[name] || '0';
             // saltar si no hay registro (evitar filas completamente vacías)
-            if ((qty === '' || qty === '0' || qty === null || qty === undefined) && String(qty).trim() === '') return;
+            if ((!entradaQty || entradaQty === '0') && (!salidaQty || salidaQty === '0')) return;
 
             const nameLines = doc.splitTextToSize(name, colNameWidth - 6);
             const rowHeight = Math.max(lineHeight, nameLines.length * lineHeight);
             if (y + rowHeight > pageHeight - 18) {
                 doc.addPage();
                 y = 18;
+                // Repetir encabezado en nueva página
+                doc.rect(margin, y, usableWidth, lineHeight, 'F');
+                doc.text('Producto', margin + 3, y + 6);
+                doc.text('Entrada', margin + colNameWidth + 4, y + 6);
+                doc.text('Salida', margin + colNameWidth + colQtyWidth + 4, y + 6);
+                y += lineHeight;
+                doc.line(margin, y, margin + usableWidth, y);
             }
-            // product name
+            // nombre producto
             doc.text(nameLines, margin + 3, y + 6);
             // quantity (right aligned in its box)
             const qtyX = margin + usableWidth - colQtyWidth + 6;
@@ -1002,7 +1103,8 @@ async function saveInventoryPDF() {
             // draw horizontal separator line
             y += rowHeight;
             doc.setDrawColor(230);
-            doc.line(margin, y, margin + usableWidth, y);
+            doc.text(String(entradaQty || '0'), margin + colNameWidth + 4, y - rowHeight + 6);
+            doc.text(String(salidaQty || '0'), margin + colNameWidth + colQtyWidth + 4, y - rowHeight + 6);
         });
 
         // Guardar el PDF con el nombre dado
@@ -1012,13 +1114,14 @@ async function saveInventoryPDF() {
         // Guardar el inventario en el registro con el mismo nombre
         try {
             const lista = getSavedInventories();
-            lista.push({ name: nombreArchivo, savedAt: new Date().toISOString(), data: data });
+            lista.push({ name: nombreArchivo, savedAt: new Date().toISOString(), data: data, salidas: salidas });
             setSavedInventories(lista);
             // compatibilidad
             localStorage.setItem('inventario_final', JSON.stringify(data));
             const meta = { savedAt: new Date().toISOString(), storage: 'localStorage', key: 'inventario_final' };
             localStorage.setItem('inventario_final_meta', JSON.stringify(meta));
             localStorage.removeItem('inventario_draft');
+            localStorage.removeItem('salidas_draft');
         } catch (e) { console.error('No se pudo guardar inventario tras exportar PDF', e); }
 
         // Después de guardar, abrir WhatsApp para enviar el documento
@@ -1063,6 +1166,17 @@ function collectInventoryData() {
     return out;
 }
 
+function collectOutputsData() {
+    const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
+    const out = {};
+    rows.forEach(r => {
+        const name = r.querySelector('div').textContent.trim();
+        let qty = r.querySelector('input').value;
+        if (qty === '' || qty === null || qty === undefined) qty = '0';
+        out[name] = qty;
+    });
+    return out;
+}
 function autosaveInventoryDraft() {
     // guarda en localStorage un borrador con las cantidades actuales
     const draft = collectInventoryData();
@@ -1083,6 +1197,32 @@ function restoreInventoryDraft() {
     } catch (e) { /* ignore */ }
 }
 
+function autosaveOutputsDraft() {
+    const draft = collectOutputsData();
+    localStorage.setItem('salidas_draft', JSON.stringify(draft));
+}
+
+function restoreOutputsDraft() {
+    const draftRaw = localStorage.getItem('salidas_draft');
+    if (!draftRaw) return;
+    try {
+        const draft = JSON.parse(draftRaw);
+        const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
+        rows.forEach((r, idx) => {
+            const name = r.querySelector('div').textContent.trim();
+            const outputIndicator = document.getElementById(`output-indicator-${idx}`);
+            if (draft[name] !== undefined) {
+                const input = r.querySelector('input');
+                input.value = draft[name];
+                // Actualizar indicador visual en la otra pestaña
+                if (draft[name] && draft[name] !== '0' && outputIndicator) {
+                    outputIndicator.textContent = `-${draft[name]}`;
+                }
+            }
+        });
+    } catch (e) { /* ignore */ }
+}
+
 function pauseInventory() {
     // simplemente cierra el modal pero mantiene el borrador en localStorage
     document.getElementById('inventory-modal').style.display = 'none';
@@ -1095,10 +1235,12 @@ function pauseInventory() {
 function clearInventoryDraft() {
     if (!confirm('¿Eliminar el borrador actual del inventario? Esta acción no se puede deshacer.')) return;
     localStorage.removeItem('inventario_draft');
+    localStorage.removeItem('salidas_draft');
     localStorage.removeItem('inventario_final');
     // limpiar inputs visibles
-    const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
-    rows.forEach(r => { const inp = r.querySelector('input'); if (inp) inp.value = ''; });
+    document.querySelectorAll('#inventory-list input, #outputs-list input').forEach(inp => inp.value = '');
+    // limpiar indicadores visuales
+    document.querySelectorAll('.output-indicator').forEach(ind => ind.textContent = '');
     updateInventoryButtonState();
     alert('Borrador eliminado.');
 }
@@ -1106,8 +1248,9 @@ function clearInventoryDraft() {
 function updateInventoryButtonState() {
     const btn = document.getElementById('open-inventory-btn');
     const draft = localStorage.getItem('inventario_draft');
+    const salidas = localStorage.getItem('salidas_draft');
     if (!btn) return;
-    if (draft) {
+    if (draft || salidas) {
         btn.style.background = 'linear-gradient(180deg,#ffd86b 0%,#f6c84c 100%)';
         btn.title = 'Inventario (borrador disponible)';
     } else {
