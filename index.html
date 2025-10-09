@@ -546,6 +546,16 @@
     .dark-theme #total { color: #ffffff; }
     .dark-theme #nombreCliente, .dark-theme #nombreVendedorDisplay, .dark-theme #fechaProforma, .dark-theme div[style*="color:#111"], .dark-theme div[style*="color: #888"] { color: #e0e0e0 !important; }
     .dark-theme span[style*="color:#007bff"] { color: #58a6ff; }
+    /* Excepción para que el modal de inventario mantenga su estilo original */
+    .dark-theme #inventory-view {
+        background: #fff !important;
+        color: var(--neon-text) !important;
+    }
+    .dark-theme #inventory-list > div {
+        color: var(--neon-text);
+        border-bottom-color: #f0f0f0 !important;
+    }
+    .dark-theme #inventory-view h3 { color: var(--neon-text); }
     </style>
 </head>
 
