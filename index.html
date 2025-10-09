@@ -505,6 +505,40 @@
         /* Cambia a violeta al pasar el mouse para dar feedback */
         .search-clear-btn:hover { color: var(--neon-secondary); }
 
+    /* --- TEMA OSCURO (NEGRO) --- */
+    body.dark-theme {
+        background-color: #121212; /* Un negro no tan puro, mejor para la vista */
+        color: #e0e0e0;
+    }
+    .dark-theme .panel-translucido {
+        background: rgba(28, 28, 28, 0.92);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #e0e0e0;
+    }
+    .dark-theme #main-title:hover {
+        filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+    }
+    .dark-theme select, .dark-theme input[type="text"], .dark-theme input[type="number"], .dark-theme input[type="password"] {
+        background-color: #2a2a2a;
+        color: #f1f1f1;
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    .dark-theme select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e0e0e0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    }
+    .dark-theme table {
+        background-color: #252525;
+    }
+    .dark-theme th, .dark-theme td {
+        border-color: #444;
+    }
+    .dark-theme th {
+        background-color: #333;
+        color: #f0f0f0;
+    }
+    .dark-theme #total { color: #ffffff; }
+    .dark-theme #nombreCliente, .dark-theme #nombreVendedorDisplay, .dark-theme #fechaProforma, .dark-theme div[style*="color:#111"], .dark-theme div[style*="color: #888"] { color: #e0e0e0 !important; }
+    .dark-theme span[style*="color:#007bff"] { color: #58a6ff; }
     </style>
 </head>
 
@@ -1960,6 +1994,36 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 400);
         }
     }
+</script>
+
+<script>
+    // Lógica para alternar entre tema claro (beige) y oscuro (negro)
+    document.addEventListener('DOMContentLoaded', function() {
+        const body = document.body;
+        const logo = document.getElementById('main-title');
+        const themeKey = 'proforma-theme';
+        const darkThemeClass = 'dark-theme';
+
+        // Función para aplicar el tema
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                body.classList.add(darkThemeClass);
+            } else {
+                body.classList.remove(darkThemeClass);
+            }
+            localStorage.setItem(themeKey, theme);
+        }
+
+        // Cargar el tema guardado al iniciar
+        const savedTheme = localStorage.getItem(themeKey) || 'light'; // 'light' es el beige por defecto
+        applyTheme(savedTheme);
+
+        // Alternar tema al hacer clic en el logo
+        logo.addEventListener('click', () => {
+            const newTheme = body.classList.contains(darkThemeClass) ? 'light' : 'dark';
+            applyTheme(newTheme);
+        });
+    });
 </script>
 
 
