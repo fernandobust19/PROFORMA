@@ -279,22 +279,11 @@
 
     body {
         font-family: 'Arial', sans-serif;
-        background-color: #f4f4f4; /* Color de respaldo si la imagen no carga */
+        background-color: #f5f5dc; /* Color beige para mejorar rendimiento */
         margin: 0;
         padding: 20px;
         font-size: 12px;
         min-height: 100vh;
-    }
-    .background-container {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100svh; /* Usa la altura del viewport más pequeña para evitar reajustes en móviles */
-        z-index: -1; /* Detrás de todo el contenido */
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
     }
     .panel-translucido {
         background: rgba(255, 255, 255, 0.90); /* Un poco más opaco para legibilidad */
@@ -520,9 +509,6 @@
 
 <body onload="inicializarProductos();">
 
-    <!-- Contenedor para el fondo fijo -->
-    <div class="background-container"></div>
-
     <!-- Calculadora (movida aquí para que exista en el DOM) -->
     <div id="calculator">
         <div id="calc-display">
@@ -551,7 +537,7 @@
     </div>
 
                 <div style="position:relative;min-height:54px;margin-bottom:8px;">
-                    <img id="main-title" src="logo.png" alt="UP-CONS IMPORTADOR - Clic para cambiar fondo" title="Clic para cambiar fondo">
+                    <img id="main-title" src="logo.png" alt="UP-CONS IMPORTADOR" title="UP-CONS IMPORTADOR">
                     <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;width:92px;height:92px;" />
                     <!-- Contenido principal -->
                     <div class="main-sections-container">
@@ -1320,55 +1306,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 </script>
 
-<script>
-    // Lógica para cambiar el fondo de la página
-    document.addEventListener('DOMContentLoaded', function() {
-        const titleElement = document.getElementById('main-title');
-        const backgroundContainer = document.querySelector('.background-container');
-        
-        const backgrounds = [
-            'fondo1.png',
-            'fondo2.png',
-            'fondo3.png',
-            'fondo4.png',
-            'gif1.gif',
-            'gif2.gif',
-            'gif3.gif',
-            'giphy.webp',
-            'giphy1.webp',
-            'fondo4.jpg',
-            'fondo5.jpg',
-            'fondo6.jpg',
-            'fondo7.jpg',
-            'fondo8.jpg'
-        ];
-        
-        // Obtener el índice guardado, o usar 0 por defecto
-        let currentBackgroundIndex = parseInt(localStorage.getItem('backgroundIndex')) || 0;
-
-        // Función para aplicar el fondo
-        function applyBackground() {
-            // Asegurarse de que el índice sea válido
-            if (currentBackgroundIndex < 0 || currentBackgroundIndex >= backgrounds.length) {
-                currentBackgroundIndex = 0;
-            }
-            backgroundContainer.style.backgroundImage = `url('${backgrounds[currentBackgroundIndex]}')`;
-            localStorage.setItem('backgroundIndex', currentBackgroundIndex); // Guardar la elección
-        }
-
-        // Aplicar el fondo inicial al cargar la página
-        applyBackground();
-
-        // Cambiar al siguiente fondo al hacer clic
-        titleElement.addEventListener('click', function() {
-            currentBackgroundIndex = (currentBackgroundIndex + 1) % backgrounds.length; // Avanza y cicla
-            applyBackground();
-        });
-    });
-</script>
-
-
-
 
 
 
@@ -1380,46 +1317,77 @@ document.addEventListener('DOMContentLoaded', function() {
     // Variable global para almacenar todas las opciones de productos originales
     let todosLosProductosOptions = [];
 
+    // Función para cargar productos desde la caché local (localStorage)
+    function cargarProductosDesdeCache() {
+        const productosCacheados = localStorage.getItem('productos_cache');
+        if (productosCacheados) {
+            console.log("Cargando productos desde el cerebro (caché)...");
+            const productos = JSON.parse(productosCacheados);
+            const selectProducto = document.getElementById("producto");
+            selectProducto.innerHTML = ''; // Limpiar select
+            todosLosProductosOptions = []; // Limpiar array global
+
+            productos.forEach(productoTexto => {
+                const option = document.createElement("option");
+                option.text = productoTexto;
+                todosLosProductosOptions.push(option);
+                selectProducto.add(option.cloneNode(true));
+            });
+            return true; // Indica que se cargó desde caché
+        }
+        return false; // No hay nada en caché
+    }
+
     // Función para cargar productos desde Google Sheets
     async function cargarProductosDesdeGoogleSheets() {
         const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
         try {
             const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('La respuesta de la red no fue exitosa.');
+            }
             const data = await response.text();
-            console.log(data); // Para verificar que los datos se están obteniendo correctamente
-
             const productos = data.split("\n").map(line => line.split(","));
-            todosLosProductosOptions = []; // Limpiar antes de llenar
+            const productosParaCache = []; // Array para guardar en el "cerebro"
             
             // Verificar que los productos se han cargado
             if (productos.length > 0) {
                 const selectProducto = document.getElementById("producto");
                 selectProducto.innerHTML = ''; // Limpiar el select
+                todosLosProductosOptions = []; // Limpiar array global
 
                 productos.forEach(function(producto) {
                     const nombreProducto = producto[0];
                     const precioProducto = producto[1] ? parseFloat(producto[1]) : null;
-
                     const option = document.createElement("option");
-                    // Verificar si el precio está vacío o no es un número
+                    let textoOpcion;
+                    
                     if (!isNaN(precioProducto)) {
-                        option.text = `${nombreProducto} - $${precioProducto.toFixed(2)}`;
+                        textoOpcion = `${nombreProducto} - $${precioProducto.toFixed(2)}`;
                     } else {
-                        // Si no hay precio, solo muestra el nombre del producto
-                        option.text = `${nombreProducto}`;
+                        textoOpcion = `${nombreProducto}`;
                     }
+                    option.text = textoOpcion;
+                    productosParaCache.push(textoOpcion); // Guardar texto para la caché
                     todosLosProductosOptions.push(option);
                     selectProducto.add(option.cloneNode(true));
                 });
+                // Guardar la lista fresca de productos en el "cerebro" (localStorage)
+                localStorage.setItem('productos_cache', JSON.stringify(productosParaCache));
+                console.log("Cerebro actualizado con nuevos productos desde Google Sheets.");
             }
         } catch (error) {
-            console.error("Error cargando productos:", error);
+            console.error("Error al cargar desde Google Sheets. Se usarán los datos del cerebro si existen.", error);
+            // No es necesario hacer nada más, porque ya se intentó cargar desde la caché.
         }
     }
 
     // Inicialización de productos
     function inicializarProductos() {
-        cargarProductosDesdeGoogleSheets();
+        // 1. Intenta cargar desde el "cerebro" para un inicio rápido y offline.
+        cargarProductosDesdeCache();
+        // 2. Luego, intenta actualizar desde internet en segundo plano.
+        cargarProductosDesdeGoogleSheets(); // Si falla, la versión del cerebro permanecerá.
     }
 
     function limpiarBuscador() {
