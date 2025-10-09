@@ -583,6 +583,13 @@
     .inventory-tab-content.active { display: block; }
     .output-indicator { color: #d9534f; font-weight: bold; margin-left: 5px; font-size: 13px; }
 
+    /* Estilo para el input de búsqueda en el inventario */
+    #inventory-search-container {
+        position: relative;
+        margin-bottom: 10px;
+    }
+    #inventory-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #aaa; }
+
     </style>
 </head>
 
@@ -691,6 +698,11 @@
                                             <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar Inventario</button>
                                         </div>
                                     </div>
+                                    <!-- Buscador para el inventario -->
+                                    <div id="inventory-search-container">
+                                        <i id="inventory-search-icon" class="fas fa-search"></i>
+                                        <input type="text" id="inventory-search" placeholder="Buscar producto en inventario..." oninput="filterInventory()" style="width: 100%; padding-left: 35px;">
+                                    </div>
                                     <!-- Pestañas de Inventario y Salidas -->
                                     <div class="inventory-tabs">
                                         <div class="inventory-tab active" onclick="switchInventoryTab('entradas')">INVENTARIO (ENTRADAS)</div>
@@ -705,6 +717,7 @@
                                     </div>
                                     <div class="inventory-footer">
                                         <div style="display:flex;gap:8px;align-items:center;">
+                                            <button id="add-new-inventory-item-btn" class="inventory-action-btn" style="background:#06d6a0;color:#fff;min-width:50px;" onclick="addNewInventoryRow()" title="Añadir nuevo producto">+</button>
                                             <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
                                             <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">🗑️ Borrar borrador</button>
                                             <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">💾 Guardar y Cerrar</button>
@@ -736,6 +749,7 @@ function openInventory() {
     // restaurar borrador si existe
     restoreInventoryDraft();
     // prevenir cierre accidental de la pestaña/ventana mientras se realiza el inventario
+    document.getElementById('inventory-search').value = ''; // Limpiar buscador
     window.addEventListener('beforeunload', preventUnload);
 }
 
@@ -886,6 +900,7 @@ function loadNamedInventory(index) {
     const salidas = item.salidas || {};
     // abrir modal principal y poblar
     document.getElementById('inventory-modal').style.display = 'flex';
+    document.getElementById('inventory-search').value = ''; // Limpiar buscador
     loadProductsForInventory();
     setTimeout(() => {
         Array.from(document.querySelectorAll('#inventory-list > div')).forEach(r => {
@@ -897,6 +912,7 @@ function loadNamedInventory(index) {
             const name = r.querySelector('div').textContent.trim();
             if (salidas[name] !== undefined) r.querySelector('input').value = salidas[name];
         });
+        filterInventory(); // Aplicar filtro por si acaso
         window.addEventListener('beforeunload', preventUnload);
     }, 120);
 }
@@ -1011,6 +1027,71 @@ function loadProductsForInventory() {
     restoreOutputsDraft();
 }
 
+function addNewInventoryRow() {
+    const inventoryList = document.getElementById('inventory-list');
+    const outputsList = document.getElementById('outputs-list');
+    const newId = `custom-${Date.now()}`; // ID único para la nueva fila
+
+    // --- Crear Fila para ENTRADAS ---
+    const rowEntrada = document.createElement('div');
+    rowEntrada.className = 'inventory-row custom-row'; // Añadir clases para identificación y búsqueda
+    rowEntrada.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; border-bottom: 1px solid #f0f0f0;';
+    
+    const nameInputEntrada = document.createElement('input');
+    nameInputEntrada.type = 'text';
+    nameInputEntrada.placeholder = 'Nombre del nuevo producto';
+    nameInputEntrada.className = 'custom-product-name';
+    nameInputEntrada.style.cssText = 'flex: 1; font-size: 14px; border: 1px solid #ccc; border-radius: 5px; padding: 4px;';
+
+    const qtyInputEntrada = document.createElement('input');
+    qtyInputEntrada.type = 'number';
+    qtyInputEntrada.min = '0';
+    qtyInputEntrada.placeholder = 'Cant.';
+    qtyInputEntrada.style.cssText = 'width: 90px; margin-left: 12px;';
+
+    const inputContainer = document.createElement('div');
+    inputContainer.style.display = 'flex';
+    inputContainer.style.alignItems = 'center';
+    const outputIndicator = document.createElement('span');
+    outputIndicator.className = 'output-indicator';
+
+    inputContainer.appendChild(qtyInputEntrada);
+    inputContainer.appendChild(outputIndicator);
+    rowEntrada.appendChild(nameInputEntrada);
+    rowEntrada.appendChild(inputContainer);
+    inventoryList.prepend(rowEntrada); // Añadir al principio para visibilidad
+
+    // --- Crear Fila para SALIDAS ---
+    const rowSalida = rowEntrada.cloneNode(true);
+    const nameInputSalida = rowSalida.querySelector('.custom-product-name');
+    nameInputSalida.readOnly = true; // El nombre se sincroniza desde la pestaña de entradas
+    nameInputSalida.style.backgroundColor = '#f8f8f8'; // Indicar que no es editable
+
+    const qtyInputSalida = document.createElement('input');
+    qtyInputSalida.type = 'number';
+    qtyInputSalida.min = '0';
+    qtyInputSalida.placeholder = 'Cant.';
+    qtyInputSalida.style.cssText = 'width: 90px; margin-left: 12px;';
+
+    rowSalida.replaceChild(qtyInputSalida, rowSalida.querySelector('div:last-child'));
+    outputsList.prepend(rowSalida);
+
+    // --- Lógica y Sincronización ---
+    nameInputEntrada.addEventListener('input', () => {
+        nameInputSalida.value = nameInputEntrada.value; // Sincronizar nombres
+        autosaveInventoryDraft();
+    });
+    qtyInputEntrada.addEventListener('input', autosaveInventoryDraft);
+    qtyInputSalida.addEventListener('input', () => {
+        autosaveOutputsDraft();
+        const salidaValue = qtyInputSalida.value;
+        outputIndicator.textContent = (salidaValue && salidaValue !== '0') ? `-${salidaValue}` : '';
+    });
+
+    nameInputEntrada.focus(); // Poner el foco en el nuevo campo de nombre
+}
+
+
 function switchInventoryTab(tabName) {
     // Ocultar todos los contenidos
     document.querySelectorAll('.inventory-tab-content').forEach(content => content.classList.remove('active'));
@@ -1020,6 +1101,24 @@ function switchInventoryTab(tabName) {
     // Activar la pestaña y contenido correctos
     document.getElementById(`tab-content-${tabName}`).classList.add('active');
     document.querySelector(`.inventory-tab[onclick="switchInventoryTab('${tabName}')"]`).classList.add('active');
+}
+
+function filterInventory() {
+    const searchTerm = document.getElementById('inventory-search').value.toLowerCase();
+    
+    // Filtrar ambas listas
+    document.querySelectorAll('#inventory-list > div, #outputs-list > div').forEach(row => {
+        let productName = '';
+        const nameDiv = row.querySelector('div:first-child');
+        const nameInput = row.querySelector('input[type="text"]');
+
+        if (nameInput) { // Para filas personalizadas
+            productName = nameInput.value.toLowerCase();
+        } else if (nameDiv) { // Para filas de productos existentes
+            productName = nameDiv.textContent.trim().toLowerCase();
+        }
+        row.style.display = productName.includes(searchTerm) ? 'flex' : 'none';
+    });
 }
 
 function downloadInventoryCSV() {
@@ -1158,7 +1257,13 @@ function collectInventoryData() {
     const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
     const out = {};
     rows.forEach(r => {
-        const name = r.querySelector('div').textContent.trim();
+        let name = '';
+        const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+        const nameInput = r.querySelector('input[type="text"]');
+        if (nameInput) name = nameInput.value.trim();
+        else if (nameDiv) name = nameDiv.textContent.trim();
+        if (!name) return; // No guardar filas personalizadas sin nombre
+
         let qty = r.querySelector('input').value;
         if (qty === '' || qty === null || qty === undefined) qty = '0';
         out[name] = qty;
@@ -1170,7 +1275,13 @@ function collectOutputsData() {
     const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
     const out = {};
     rows.forEach(r => {
-        const name = r.querySelector('div').textContent.trim();
+        let name = '';
+        const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+        const nameInput = r.querySelector('input[type="text"]');
+        if (nameInput) name = nameInput.value.trim();
+        else if (nameDiv) name = nameDiv.textContent.trim();
+        if (!name) return;
+
         let qty = r.querySelector('input').value;
         if (qty === '' || qty === null || qty === undefined) qty = '0';
         out[name] = qty;
@@ -1190,8 +1301,14 @@ function restoreInventoryDraft() {
         const draft = JSON.parse(draftRaw);
         // asignar a inputs ya creados
         const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
-        rows.forEach(r => {
-            const name = r.querySelector('div').textContent.trim();
+        rows.forEach((r, idx) => {
+            let name = '';
+            const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+            const nameInput = r.querySelector('input[type="text"]');
+            if (nameInput) name = nameInput.value.trim();
+            else if (nameDiv) name = nameDiv.textContent.trim();
+            if (!name) return;
+
             if (draft[name] !== undefined) r.querySelector('input').value = draft[name];
         });
     } catch (e) { /* ignore */ }
@@ -1209,7 +1326,13 @@ function restoreOutputsDraft() {
         const draft = JSON.parse(draftRaw);
         const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
         rows.forEach((r, idx) => {
-            const name = r.querySelector('div').textContent.trim();
+            let name = '';
+            const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+            const nameInput = r.querySelector('input[type="text"]');
+            if (nameInput) name = nameInput.value.trim();
+            else if (nameDiv) name = nameDiv.textContent.trim();
+            if (!name) return;
+
             const outputIndicator = document.getElementById(`output-indicator-${idx}`);
             if (draft[name] !== undefined) {
                 const input = r.querySelector('input');
