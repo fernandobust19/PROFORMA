@@ -523,6 +523,13 @@
         color: #f1f1f1;
         border-color: rgba(255, 255, 255, 0.2);
     }
+    /* Excepción para que los campos de producto y precio mantengan su estilo original en modo oscuro */
+    .dark-theme #nombreProducto, .dark-theme #precioProducto {
+        background: linear-gradient(white, white) padding-box,
+                    linear-gradient(to right, #8b5cf6, #ffca7a) border-box;
+        color: var(--neon-text); /* Texto oscuro */
+        border: 2px solid transparent;
+    }
     .dark-theme select {
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e0e0e0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
     }
