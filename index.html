@@ -578,12 +578,22 @@
         color: #111111 !important;
         text-shadow: none !important;
     }
-    /* Forzar fondo transparente y texto negro en la mayoría de los hijos */
+    /* Forzar fondo blanco o transparente y texto negro en todos los elementos */
+    .force-light-theme-for-capture *:not(th) {
+        background: transparent !important;
+        color: #111111 !important;
+        text-shadow: none !important;
+        border-color: #ddd !important;
+    }
+    /* Forzar fondo blanco específicamente en ciertos elementos */
     .force-light-theme-for-capture div,
     .force-light-theme-for-capture label,
     .force-light-theme-for-capture h2,
-    .force-light-theme-for-capture td {
-        background: transparent !important;
+    .force-light-theme-for-capture td,
+    .force-light-theme-for-capture input,
+    .force-light-theme-for-capture textarea,
+    .force-light-theme-for-capture table {
+        background: #ffffff !important;
         color: #111111 !important;
         text-shadow: none !important;
     }
@@ -595,8 +605,21 @@
         border-color: #ddd !important;
     }
     /* 2. Mantener el color azul del enlace web */
-    .force-light-theme-for-capture span[style*="color:#007bff"] {
+    .force-light-theme-for-capture span[style*="color:#007bff"],
+    .force-light-theme-for-capture a {
         color: #007bff !important;
+    }
+    /* 3. Asegurar que la tabla tenga fondo blanco */
+    .force-light-theme-for-capture table {
+        background-color: #ffffff !important;
+    }
+    /* 4. Forzar texto negro para vendedor, fecha y cliente (CONSUMIDOR FINAL) */
+    .force-light-theme-for-capture #nombreVendedorDisplay,
+    .force-light-theme-for-capture #fechaProforma,
+    .force-light-theme-for-capture #nombreCliente,
+    .force-light-theme-for-capture span b,
+    .force-light-theme-for-capture b {
+        color: #111111 !important;
     }
 
     /* --- TEMA OSCURO (NEGRO) --- */
