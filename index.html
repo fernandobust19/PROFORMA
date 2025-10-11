@@ -506,13 +506,32 @@
         /* Cambia a violeta al pasar el mouse para dar feedback */
         .search-clear-btn:hover { color: var(--neon-secondary); }
 
-    /* Clase temporal para forzar el tema claro al guardar como imagen */
-    .force-light-theme-for-capture,
-    .force-light-theme-for-capture * {
+    /* --- Clase para forzar el tema claro al guardar como imagen --- */
+    /* Contenedor principal: fondo blanco y color de texto por defecto negro */
+    .force-light-theme-for-capture {
         background: #ffffff !important;
         color: #111111 !important;
-        border-color: #ddd !important;
         text-shadow: none !important;
+    }
+    /* Forzar fondo transparente y texto negro en la mayoría de los hijos */
+    .force-light-theme-for-capture div,
+    .force-light-theme-for-capture label,
+    .force-light-theme-for-capture h2,
+    .force-light-theme-for-capture td {
+        background: transparent !important;
+        color: #111111 !important;
+        text-shadow: none !important;
+    }
+    /* EXCEPCIONES: Mantener colores específicos */
+    /* 1. Mantener el fondo azul y texto blanco de los encabezados de la tabla */
+    .force-light-theme-for-capture th {
+        background-color: #007bff !important;
+        color: white !important;
+        border-color: #ddd !important;
+    }
+    /* 2. Mantener el color azul del enlace web */
+    .force-light-theme-for-capture span[style*="color:#007bff"] {
+        color: #007bff !important;
     }
 
     /* --- TEMA OSCURO (NEGRO) --- */
@@ -1961,7 +1980,7 @@ document.addEventListener('DOMContentLoaded', function() {
         row.dataset.originalHtml = row.innerHTML;
 
         // Estilos para los inputs para que sean más anchos y visibles
-        const inputStyle = 'width: 95%; padding: 4px; font-size: 11px;';
+        const inputStyle = 'width: 120px; padding: 4px; font-size: 11px;'; // Ancho fijo para el nombre
         const numberInputStyle = 'width: 60px; padding: 4px; font-size: 11px;';
 
         row.cells[0].innerHTML = `<input type="text" value="${nombreOriginal}" style="${inputStyle}">`;
