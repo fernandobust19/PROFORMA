@@ -29,6 +29,12 @@
     50% { filter: drop-shadow(0 0 12px rgba(155, 92, 255, 0.45)); }
 }
 
+/* Animación para modales y elementos emergentes */
+@keyframes popIn {
+    from { transform: scale(0.9) translateY(10px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
 /* Estilo del botón flotante */
 #calculator-btn {
     position: fixed;
@@ -369,13 +375,28 @@
         margin-top: 15px;
         background-color: white;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: relative;
+        table-layout: fixed;
     }
     th, td {
         border: 1px solid #ddd;
         padding: 4px;
         text-align: left;
         font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
+    
+    /* Celdas editables */
+    td.editable-cell {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    td.editable-cell:hover {
+        background-color: rgba(0, 123, 255, 0.05);
+    }
+    
     th {
         background-color: #007bff;
         color: white;
@@ -384,6 +405,7 @@
         /* Usamos el nuevo estilo de panel, pero mantenemos el overflow */
         max-height: 100vh;
         overflow-y: auto;
+        overflow-x: visible;
         /* El resto de estilos (fondo, padding, etc.) vienen de .panel-translucido */
     }
     #contenido {
@@ -407,7 +429,50 @@
         color: red;
         border: none;
         background: transparent;
-    }    
+    }
+
+    /* Estilo para los inputs de edición en la tabla de proforma */
+    .editing-input {
+        width: 150%;
+        padding: 4px;
+        font-size: 12px;
+        font-weight: normal;
+        font-family: 'Arial', sans-serif;
+        color: #000;
+        border: 1px solid #007bff;
+        border-radius: 2px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1000;
+        outline: none;
+        box-sizing: border-box;
+        line-height: 1.4;
+        margin: 0;
+        height: 28px;
+        display: block;
+        position: relative;
+    }
+
+    .editing-input:focus {
+        border-color: #0056b3;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        background: #fff;
+    }
+
+    /* Fila en modo edición */
+    tr.editing-row {
+        background: transparent !important;
+    }
+
+    tr.editing-row td {
+        position: static;
+        padding: 4px;
+    }
+
+    /* Celdas con inputs */
+    tr.editing-row td.editing-cell {
+        position: static;
+    }
 
     /* Estilo para los botones "Agregar Producto" y "Guardar como Imagen" */
     .action-buttons-container {
@@ -625,6 +690,10 @@
         color: #102035; /* Texto negro */
     }
 
+        [contenteditable]:focus {
+            outline: none;
+            font-size: 1em;
+        }
     </style>
 </head>
 
@@ -704,12 +773,10 @@
                                 <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
                                 <table>
                                     <tr>
-                                        <th>Producto</th>
-                                        <th>Cant.</th>
-                                        <th>Precio Uni.</th>
-                                        <th>Subtotal</th>
-                                        <th>Editar</th>
-                                        <th>Elim.</th>
+                                        <th style="width: 50%;">Producto</th>
+                                        <th style="width: 15%;">Cant.</th>
+                                        <th style="width: 17%;">Precio Uni.</th>
+                                        <th style="width: 18%;">Subtotal</th>
                                     </tr>
                                 </table>
                                 <h2 id="subtotal" style="font-size: 9px;"> </h2>
@@ -1257,13 +1324,11 @@ async function saveInventoryPDF() {
             // nombre producto
             doc.text(nameLines, margin + 3, y + 6);
             // quantity (right aligned in its box)
-            const qtyX = margin + usableWidth - colQtyWidth + 6;
-            doc.text(String(qty), qtyX, y + 6);
+            doc.text(String(entradaQty || '0'), margin + colNameWidth + 4, y + 6);
+            doc.text(String(salidaQty || '0'), margin + colNameWidth + colQtyWidth + 4, y + 6);
             // draw horizontal separator line
             y += rowHeight;
             doc.setDrawColor(230);
-            doc.text(String(entradaQty || '0'), margin + colNameWidth + 4, y - rowHeight + 6);
-            doc.text(String(salidaQty || '0'), margin + colNameWidth + colQtyWidth + 4, y - rowHeight + 6);
         });
 
         // Guardar el PDF con el nombre dado
@@ -1765,6 +1830,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Cargando productos desde el cerebro (caché)...");
             const productos = JSON.parse(productosCacheados);
             const selectProducto = document.getElementById("producto");
+            const fragment = document.createDocumentFragment(); // Optimización: usar fragment
             selectProducto.innerHTML = ''; // Limpiar select
             todosLosProductosOptions = []; // Limpiar array global
 
@@ -1772,8 +1838,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 const option = document.createElement("option");
                 option.text = productoTexto;
                 todosLosProductosOptions.push(option);
-                selectProducto.add(option.cloneNode(true));
+                fragment.appendChild(option.cloneNode(true)); // Añadir al fragment
             });
+            
+            selectProducto.appendChild(fragment); // Una sola inserción al DOM
             return true; // Indica que se cargó desde caché
         }
         return false; // No hay nada en caché
@@ -1794,6 +1862,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Verificar que los productos se han cargado
             if (productos.length > 0) {
                 const selectProducto = document.getElementById("producto");
+                const fragment = document.createDocumentFragment(); // Optimización: usar fragment
                 selectProducto.innerHTML = ''; // Limpiar el select
                 todosLosProductosOptions = []; // Limpiar array global
 
@@ -1811,8 +1880,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.text = textoOpcion;
                     productosParaCache.push(textoOpcion); // Guardar texto para la caché
                     todosLosProductosOptions.push(option);
-                    selectProducto.add(option.cloneNode(true));
+                    fragment.appendChild(option.cloneNode(true)); // Añadir al fragment en lugar del select
                 });
+                
+                selectProducto.appendChild(fragment); // Una sola inserción al DOM
+                
                 // Guardar la lista fresca de productos en el "cerebro" (localStorage)
                 localStorage.setItem('productos_cache', JSON.stringify(productosParaCache));
                 console.log("Cerebro actualizado con nuevos productos desde Google Sheets.");
@@ -1825,10 +1897,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Inicialización de productos
     function inicializarProductos() {
-        // 1. Intenta cargar desde el "cerebro" para un inicio rápido y offline.
-        cargarProductosDesdeCache();
-        // 2. Luego, intenta actualizar desde internet en segundo plano.
-        cargarProductosDesdeGoogleSheets(); // Si falla, la versión del cerebro permanecerá.
+        // 1. Intenta actualizar desde internet. Si falla, usa la caché.
+        cargarProductosDesdeGoogleSheets().catch(() => {
+            cargarProductosDesdeCache();
+        });
     }
 
     function limpiarBuscador() {
@@ -1858,7 +1930,7 @@ document.addEventListener('DOMContentLoaded', function() {
             let nombreProducto = nombreCompleto.split(' - $')[0]; // Obtener solo la parte del nombre, antes del precio
             
             // Lógica mejorada: Separa números de letras (ej: "100mm" -> "100 mm") para que la búsqueda por palabra completa funcione.
-            nombreProducto = nombreProducto.replace(/(\d+)([a-zA-Z]+)/g, '$1 $2');
+            nombreProducto = nombreProducto.replace(/(\d+)([a-zA-Z]+)/g, '$1 $2').replace(/([a-zA-Z]+)(\d+)/g, '$1 $2');
 
             // Lógica mejorada: Busca palabras que COMIENCEN con el término de búsqueda para resultados instantáneos y precisos.
             return palabras.every(palabra => new RegExp('\\b' + palabra).test(nombreProducto));
@@ -1927,35 +1999,38 @@ document.addEventListener('DOMContentLoaded', function() {
             var cell2 = newRow.insertCell(1);
             var cell3 = newRow.insertCell(2);
             var cell4 = newRow.insertCell(3);
-            var cell5 = newRow.insertCell(4);
-            var cell6 = newRow.insertCell(5);
 
+            // Configurar celdas con contenido
             cell1.innerHTML = nombreProducto;
+            cell1.className = 'editable-cell';
+            cell1.title = nombreProducto; // Tooltip para ver texto completo
+            cell1.dataset.originalName = nombreProducto;
+            cell1.dataset.price = precio;
+            cell1.dataset.qty = cantidad;
+            
             cell2.innerHTML = cantidad;
+            cell2.className = 'editable-cell';
+            cell2.dataset.originalName = nombreProducto;
+            
             cell3.innerHTML = "$" + precio.toFixed(2);
+            cell3.className = 'editable-cell';
+            cell3.dataset.originalName = nombreProducto;
+            
             cell4.innerHTML = "$" + subtotal.toFixed(2);
 
-            // Botón de edición
-            var editButton = document.createElement("button");
-            editButton.innerHTML = '<i class="fas fa-edit edit-icon" style="font-size:12px;"></i>';
-            editButton.className = "edit-btn";
-            editButton.style.padding = "2px 4px";
-            editButton.onclick = function() {
-                editarProducto(newRow, nombreProducto, precio, cantidad);
+            // Hacer celdas editables al hacer clic
+            cell1.onclick = function() { editarCelda(this, 'nombre', nombreProducto); };
+            cell2.onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
+            cell3.onclick = function() { editarCelda(this, 'precio', nombreProducto); };
+            
+            // Doble clic para eliminar fila (en cualquier celda)
+            newRow.ondblclick = function() {
+                if (confirm('¿Eliminar este producto?')) {
+                    delete productos[nombreProducto];
+                    table.deleteRow(newRow.rowIndex);
+                    calcularTotal();
+                }
             };
-            cell5.appendChild(editButton);
-
-            // Botón de eliminación (icono más pequeño)
-            var deleteButton = document.createElement("button");
-            deleteButton.innerHTML = '<i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i>';
-            deleteButton.className = "close-btn";
-            deleteButton.style.padding = "2px 4px";
-            deleteButton.onclick = function() {
-                delete productos[nombreProducto];
-                table.deleteRow(newRow.rowIndex);
-                calcularTotal();
-            };
-            cell6.appendChild(deleteButton);
 
             calcularTotal();
 
@@ -1968,32 +2043,120 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             alert("Por favor, ingrese un nombre y un precio válido.");
         }
-    }    
-    
-    
-    
-    
-    
+    }
+
+    // Nueva función para editar celda al hacer clic
+    function editarCelda(celda, tipo, nombreOriginal) {
+        // Si ya está editando, no hacer nada
+        if (celda.querySelector('input')) return;
+        
+        const valorActual = celda.textContent.replace('$', '').trim();
+        const row = celda.parentNode;
+        
+        // Crear input
+        const input = document.createElement('input');
+        input.className = 'editing-input';
+        
+        if (tipo === 'nombre') {
+            input.type = 'text';
+            input.value = valorActual;
+            input.style.width = '150%';
+        } else if (tipo === 'cantidad') {
+            input.type = 'number';
+            input.min = '1';
+            input.value = parseInt(valorActual) || 1;
+            input.style.width = '200%';
+        } else if (tipo === 'precio') {
+            input.type = 'number';
+            input.step = '0.01';
+            input.value = parseFloat(valorActual) || 0;
+            input.style.width = '180%';
+        }
+        
+        // Reemplazar contenido con input
+        celda.innerHTML = '';
+        celda.appendChild(input);
+        input.focus();
+        input.select();
+        
+        // Guardar al presionar Enter o perder foco
+        const guardar = function() {
+            const nuevoValor = input.value.trim();
+            if (!nuevoValor) {
+                celda.textContent = valorActual;
+                return;
+            }
+            
+            // Obtener datos de la fila
+            const celdaNombre = row.cells[0];
+            const celdaCant = row.cells[1];
+            const celdaPrecio = row.cells[2];
+            const celdaSubtotal = row.cells[3];
+            
+            let nombre = celdaNombre.textContent || celdaNombre.querySelector('input')?.value;
+            let cantidad = parseInt(celdaCant.textContent || celdaCant.querySelector('input')?.value);
+            let precio = parseFloat((celdaPrecio.textContent || celdaPrecio.querySelector('input')?.value).replace('$', ''));
+            
+            // Actualizar según el tipo
+            if (tipo === 'nombre') {
+                delete productos[nombreOriginal];
+                nombre = nuevoValor;
+                celda.textContent = nuevoValor;
+                celda.title = nuevoValor;
+            } else if (tipo === 'cantidad') {
+                cantidad = parseInt(nuevoValor);
+                celda.textContent = cantidad;
+            } else if (tipo === 'precio') {
+                precio = parseFloat(nuevoValor);
+                celda.textContent = '$' + precio.toFixed(2);
+            }
+            
+            // Actualizar productos y subtotal
+            productos[nombre] = { precio: precio, cantidad: cantidad };
+            celdaSubtotal.textContent = '$' + (precio * cantidad).toFixed(2);
+            
+            // Actualizar eventos onclick con nuevo nombre
+            celdaNombre.onclick = function() { editarCelda(this, 'nombre', nombre); };
+            celdaCant.onclick = function() { editarCelda(this, 'cantidad', nombre); };
+            celdaPrecio.onclick = function() { editarCelda(this, 'precio', nombre); };
+            
+            calcularTotal();
+        };
+        
+        input.onblur = guardar;
+        input.onkeydown = function(e) {
+            if (e.key === 'Enter') {
+                guardar();
+            } else if (e.key === 'Escape') {
+                celda.textContent = tipo === 'precio' ? '$' + valorActual : valorActual;
+            }
+        };
+    }
 
     function editarProducto(row, nombreOriginal, precioOriginal, cantidadOriginal) {        
         // Guardar el contenido original de la fila para poder cancelar la edición
         row.dataset.originalHtml = row.innerHTML;
 
-        // Estilos para los inputs. Usamos position:absolute para que no deformen la tabla.
-        const inputBaseStyle = 'padding: 4px; font-size: 11px; border: 1px solid #007bff; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10;';
-        const nameInputStyle = `position: absolute; top: 1px; left: 1px; width: 140px; ${inputBaseStyle}`;
-        const numberInputStyle = `position: absolute; top: 1px; left: 1px; width: 60px; ${inputBaseStyle}`;
+        // Agregar clase de edición a la fila completa
+        row.classList.add('editing-row');
 
-        // Aplicar position:relative a las celdas para que los inputs se posicionen correctamente dentro de ellas.
-        row.cells[0].style.position = 'relative';
-        row.cells[1].style.position = 'relative';
-        row.cells[2].style.position = 'relative';
+        // Agregar clase a las celdas que contendrán inputs
+        row.cells[0].classList.add('editing-cell');
+        row.cells[1].classList.add('editing-cell');
+        row.cells[2].classList.add('editing-cell');
 
-        // Insertar los inputs flotantes
-        row.cells[0].innerHTML = `<input type="text" value="${nombreOriginal}" style="${nameInputStyle}">`;
-        row.cells[1].innerHTML = `<input type="number" value="${cantidadOriginal}" min="1" style="${numberInputStyle}">`;
-        row.cells[2].innerHTML = `<input type="number" value="${precioOriginal.toFixed(2)}" step="0.01" style="${numberInputStyle}">`;
+        // Insertar los inputs con tamaños completos y visibles
+        row.cells[0].innerHTML = `<input type="text" value="${nombreOriginal}" class="editing-input">`;
+        row.cells[1].innerHTML = `<input type="number" value="${cantidadOriginal}" min="1" class="editing-input">`;
+        row.cells[2].innerHTML = `<input type="number" value="${precioOriginal.toFixed(2)}" step="0.01" class="editing-input">`;
         
+        // Poner el foco en el primer input para una edición rápida
+        const firstInput = row.cells[0].querySelector('input');
+        if (firstInput) {
+            firstInput.focus();
+            firstInput.select();
+        }
+
         // Limpiar las celdas de subtotal y botones
         row.cells[3].innerHTML = ''; // Celda de subtotal
         row.cells[4].innerHTML = ''; // Celda de editar
@@ -2024,10 +2187,11 @@ document.addEventListener('DOMContentLoaded', function() {
             row.cells[2].innerHTML = "$" + precio.toFixed(2);
             row.cells[3].innerHTML = "$" + subtotal.toFixed(2);
 
-            // Quitar el position:relative de las celdas para devolverlas a la normalidad.
-            row.cells[0].style.position = '';
-            row.cells[1].style.position = '';
-            row.cells[2].style.position = '';
+            // Remover las clases de edición
+            row.classList.remove('editing-row');
+            row.cells[0].classList.remove('editing-cell');
+            row.cells[1].classList.remove('editing-cell');
+            row.cells[2].classList.remove('editing-cell');
 
             // Restaurar los botones de Editar y Eliminar
             row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreProducto}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
@@ -2039,13 +2203,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function cancelarEdicion(btn) {
+    function cancelarEdicion(btn, nombreOriginal) {
         var row = btn.parentNode.parentNode;
-        // Restaurar el contenido HTML original de la fila que guardamos
-        if (row.dataset.originalHtml) {
-            row.innerHTML = row.dataset.originalHtml;
-            // Es necesario volver a asignar los eventos a los botones restaurados
-            establecerEventos();
+        const producto = productos[nombreOriginal];
+        if (producto) {
+            const { precio, cantidad } = producto;
+            const subtotal = precio * cantidad;
+
+            row.cells[0].innerHTML = nombreOriginal;
+            row.cells[1].innerHTML = cantidad;
+            row.cells[2].innerHTML = "$" + precio.toFixed(2);
+            row.cells[3].innerHTML = "$" + subtotal.toFixed(2);
+
+            // Remover las clases de edición
+            row.classList.remove('editing-row');
+            row.cells[0].classList.remove('editing-cell');
+            row.cells[1].classList.remove('editing-cell');
+            row.cells[2].classList.remove('editing-cell');
+
+            // Restaurar botones con sus eventos
+            row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreOriginal}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
+            row.cells[5].innerHTML = `<button onclick="eliminarFila(this, '${nombreOriginal}')" class="close-btn" style="padding: 2px 4px;"><i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i></button>`;
         }
     }
     
@@ -2054,6 +2232,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     
     
+    // Función para eliminar una fila, necesaria para el botón restaurado después de editar
+    function eliminarFila(btn, nombreProducto) {
+        var row = btn.parentNode.parentNode;
+        delete productos[nombreProducto];
+        row.parentNode.removeChild(row);
+        calcularTotal();
+    }
     
     
     function calcularTotal() { 
@@ -2075,35 +2260,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById("total").innerHTML = "Total: $" + totalConIVA.toFixed(2);
 }   
-
-
-function guardarPagina() {
-    var nombrePagina = document.getElementById("nombrePagina").value || "proforma_guardada";
-    var nombreCliente = document.getElementById("nombreCliente").value || "";
-    var nombreVendedor = document.getElementById("nombreVendedorDisplay").innerText || "";
-
-    // Clonar el contenido de la página y modificar campos dinámicos
-    let htmlClonado = document.documentElement.outerHTML;
-
-    // Insertar el valor del cliente
-    htmlClonado = htmlClonado.replace(
-        /<input type="text" id="nombreCliente"[^>]*>/,
-        `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${nombreCliente}">`
-    );
-
-    // Insertar el vendedor seleccionado
-    htmlClonado = htmlClonado.replace(/<span id="nombreVendedorDisplay"[^>]*>.*<\/span>/,
-        `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
-    );
-
-    const blob = new Blob([htmlClonado], { type: "text/html" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = nombrePagina + ".html";
-    a.click();
-    URL.revokeObjectURL(a.href);
-}
-
 
     function cargarPagina() {
     // Modal con lista de proformas guardadas en localStorage
@@ -2233,7 +2389,6 @@ function cargarProformaEnPagina(html) {
     document.getElementById('nombreCliente').value = nombreCliente;
     document.getElementById('nombreVendedorDisplay').innerText = nombreVendedor;
     calcularTotal();
-    establecerEventos();
 }
 
     // Función para establecer los eventos de editar y eliminar productos
@@ -2288,7 +2443,8 @@ function calculateResult() {
         let expression = output.value
             .replace(/%/g, "/100")
             .replace(/x/g, "*");
-        output.value = eval(expression);
+        // Usar new Function() es más seguro que eval()
+        output.value = new Function('return ' + expression)();
     } catch (error) {
         output.value = "Error";
     }
@@ -2340,8 +2496,8 @@ document.addEventListener('DOMContentLoaded', function() {
             decrementQuantity();
         }
     }
-    cantidadInput.addEventListener('wheel', handleWheel);
-    scrollbar.addEventListener('wheel', handleWheel);
+    cantidadInput.addEventListener('wheel', handleWheel, { passive: false });
+    scrollbar.addEventListener('wheel', handleWheel, { passive: false });
 
     // --- Lógica para Arrastrar (Drag & Touch) ---
     let isDragging = false;
@@ -2400,10 +2556,11 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- Acceso a inventario (bloque separado) -->
     <div class="no-imagen" style="margin:8px 0 0 0; text-align:left; max-width:520px; display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
         <label style="font-weight:bold; font-size: 15px; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 6px rgba(255,255,255,0.8);">Base de datos</label>
-        <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
-            <input type="password" id="password" placeholder="Ingresa la contraseña">
-            <button id="accederBtn" class="action-button btn-verde" onclick="verificarPassword()">Acceder</button>
-        </div>
+        <form onsubmit="event.preventDefault(); verificarPassword();" style="display:flex;gap:8px;align-items:center;justify-content:center;width:100%;">
+            <input type="text" name="username" autocomplete="username" style="display:none;" aria-hidden="true" tabindex="-1">
+            <input type="password" id="password" name="password" placeholder="Ingresa la contraseña" autocomplete="current-password">
+            <button type="submit" id="accederBtn" class="action-button btn-verde">Acceder</button>
+        </form>
         <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
     </div>
 
