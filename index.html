@@ -506,6 +506,15 @@
         /* Cambia a violeta al pasar el mouse para dar feedback */
         .search-clear-btn:hover { color: var(--neon-secondary); }
 
+    /* Clase temporal para forzar el tema claro al guardar como imagen */
+    .force-light-theme-for-capture,
+    .force-light-theme-for-capture * {
+        background: #ffffff !important;
+        color: #111111 !important;
+        border-color: #ddd !important;
+        text-shadow: none !important;
+    }
+
     /* --- TEMA OSCURO (NEGRO) --- */
     body.dark-theme {
         background-color: #121212; /* Un negro no tan puro, mejor para la vista */
@@ -1672,12 +1681,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ocultar elementos que no deben salir en la imagen
         ocultar.forEach(el => el.style.display = 'none');
         
-        // Forzar un ancho de "celular" para la captura
+        // Forzar un ancho de "celular" y el tema claro para la captura
         proforma.style.width = '414px';
         proforma.style.maxWidth = '414px';
-        // Aplicar fondo blanco sólido SÓLO para la captura de imagen
-        proforma.style.background = 'white';
-        proforma.style.backdropFilter = 'none';
+        proforma.classList.add('force-light-theme-for-capture');
 
         // Esperar un pequeño tiempo para que el DOM se actualice y luego capturar
         setTimeout(() => {
@@ -1712,6 +1719,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 clienteInput.value = originalClienteValue; // Restaurar el valor original del cliente
                 ocultar.forEach(el => el.style.display = ''); // Usar '' para restaurar el display por defecto
                 proforma.style.cssText = originalProformaStyle; // Restaurar estilos originales
+                proforma.classList.remove('force-light-theme-for-capture'); // Quitar la clase temporal
             }).catch(err => {
                 console.error('Error html2canvas:', err);
                 alert('No fue posible generar la imagen en este dispositivo.');
@@ -1948,11 +1956,27 @@ document.addEventListener('DOMContentLoaded', function() {
     
     
 
-    function editarProducto(row, nombreProducto, precio, cantidad) {
-        row.cells[0].innerHTML = '<input type="text" value="' + nombreProducto + '">';
-        row.cells[1].innerHTML = '<input type="number" value="' + cantidad + '" min="1">';
-        row.cells[2].innerHTML = '<input type="number" value="' + precio + '">';
-        row.cells[3].innerHTML = '<button onclick="actualizarProducto(this, \'' + nombreProducto + '\')">Actualizar</button>';
+    function editarProducto(row, nombreOriginal, precioOriginal, cantidadOriginal) {
+        // Guardar el contenido original de la fila para poder cancelar la edición
+        row.dataset.originalHtml = row.innerHTML;
+
+        // Estilos para los inputs para que sean más anchos y visibles
+        const inputStyle = 'width: 95%; padding: 4px; font-size: 11px;';
+        const numberInputStyle = 'width: 60px; padding: 4px; font-size: 11px;';
+
+        row.cells[0].innerHTML = `<input type="text" value="${nombreOriginal}" style="${inputStyle}">`;
+        row.cells[1].innerHTML = `<input type="number" value="${cantidadOriginal}" min="1" style="${numberInputStyle}">`;
+        row.cells[2].innerHTML = `<input type="number" value="${precioOriginal.toFixed(2)}" step="0.01" style="${numberInputStyle}">`;
+        
+        // Limpiar las celdas de subtotal y botones
+        row.cells[3].innerHTML = ''; // Celda de subtotal
+        row.cells[4].innerHTML = ''; // Celda de editar
+
+        // Añadir botones de "Aceptar" (visto) y "Cancelar" en la última celda
+        row.cells[5].innerHTML = `
+            <button onclick="actualizarProducto(this, '${nombreOriginal}')" style="background:transparent; border:none; color:green; cursor:pointer; font-size:14px; padding: 2px 4px;"><i class="fas fa-check"></i></button>
+            <button onclick="cancelarEdicion(this, '${nombreOriginal}')" style="background:transparent; border:none; color:red; cursor:pointer; font-size:14px; padding: 2px 4px;"><i class="fas fa-times"></i></button>
+        `;
     }
 
     function actualizarProducto(btn, nombreOriginal) {
@@ -1962,18 +1986,34 @@ document.addEventListener('DOMContentLoaded', function() {
         var precio = parseFloat(row.cells[2].querySelector('input').value);
 
         if (nombreProducto && !isNaN(cantidad) && !isNaN(precio)) {
-            var subtotal = precio * cantidad;
-            productos[nombreProducto] = { precio: precio, cantidad: cantidad };
+            // Actualizar el objeto de productos
             delete productos[nombreOriginal];
+            productos[nombreProducto] = { precio: precio, cantidad: cantidad };
+
+            var subtotal = precio * cantidad;
 
             row.cells[0].innerHTML = nombreProducto;
             row.cells[1].innerHTML = cantidad;
             row.cells[2].innerHTML = "$" + precio.toFixed(2);
             row.cells[3].innerHTML = "$" + subtotal.toFixed(2);
 
+            // Restaurar los botones de Editar y Eliminar
+            row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreProducto}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
+            row.cells[5].innerHTML = `<button onclick="eliminarFila(this, '${nombreProducto}')" class="close-btn" style="padding: 2px 4px;"><i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i></button>`;
+
             calcularTotal();
         } else {
             alert("Por favor, ingrese valores válidos para nombre, cantidad y precio.");
+        }
+    }
+
+    function cancelarEdicion(btn) {
+        var row = btn.parentNode.parentNode;
+        // Restaurar el contenido HTML original de la fila que guardamos
+        if (row.dataset.originalHtml) {
+            row.innerHTML = row.dataset.originalHtml;
+            // Es necesario volver a asignar los eventos a los botones restaurados
+            establecerEventos();
         }
     }
     
