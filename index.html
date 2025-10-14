@@ -683,6 +683,7 @@
                                 <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
                             </div>
                             <div class="proforma-main-actions-container">
+                                <button class="proforma-action-btn btn-verde" onclick="nuevaProforma()">📄 Nueva Proforma</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
                             </div>
@@ -1591,6 +1592,245 @@ function guardarPaginaPersonalizadaDesdeModal() {
 
 window.mostrarModalNombreArchivo = mostrarModalNombreArchivo;
 window.guardarPaginaPersonalizadaDesdeModal = guardarPaginaPersonalizadaDesdeModal;
+
+// === SISTEMA DE AUTOGUARDADO ===
+let proformaId = null;
+let autoSaveTimeout = null;
+
+// Generar ID único para cada nueva proforma
+function generarProformaId() {
+    return 'proforma_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Inicializar ID de proforma al cargar la página o al crear una nueva
+function inicializarProformaId() {
+    if (!proformaId) {
+        proformaId = generarProformaId();
+    }
+}
+
+// Función para autoguardar la proforma
+function autoguardarProforma() {
+    if (!proformaId) {
+        inicializarProformaId();
+    }
+
+    // Debounce: cancelar autoguardado anterior si existe
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+    }
+
+    // Programar autoguardado después de 2 segundos de inactividad
+    autoSaveTimeout = setTimeout(function() {
+        const nombreCliente = (document.getElementById('nombreCliente').value || '').trim() || "CONSUMIDOR FINAL";
+        const nombreVendedor = document.getElementById('nombreVendedorDisplay').innerText || "";
+        
+        // Clonar el documento actual
+        let docClone = document.documentElement.cloneNode(true);
+        
+        // Eliminar modales del clon
+        let modales = docClone.querySelectorAll('[id*="modal"]');
+        modales.forEach(modal => modal.remove());
+        
+        // Eliminar overlays del clon
+        let overlays = docClone.querySelectorAll('[style*="background:rgba(0,0,0"]');
+        overlays.forEach(overlay => overlay.remove());
+        
+        // Actualizar campos dinámicos en el clon
+        let htmlClonado = docClone.outerHTML;
+        htmlClonado = htmlClonado.replace(
+            /<input type="text" id="nombreCliente"[^>]*>/,
+            `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${nombreCliente}">`
+        );
+        htmlClonado = htmlClonado.replace(/<span id="nombreVendedorDisplay"[^>]*>.*<\/span>/,
+            `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
+        );
+        
+        // Guardar en localStorage con timestamp
+        let proformasAuto = [];
+        try {
+            proformasAuto = JSON.parse(localStorage.getItem('proformas_autoguardadas') || '[]');
+        } catch(e) { 
+            proformasAuto = []; 
+        }
+        if (!Array.isArray(proformasAuto)) proformasAuto = [];
+        
+        const ahora = new Date();
+        const fechaFormateada = ahora.toLocaleDateString('es-ES') + ' ' + ahora.toLocaleTimeString('es-ES');
+        
+        // Buscar si ya existe un autoguardado para esta proforma
+        const indiceExistente = proformasAuto.findIndex(p => p.proformaId === proformaId);
+        
+        const datosAutoguardado = {
+            proformaId: proformaId,
+            name: `${nombreCliente} (${fechaFormateada})`,
+            savedAt: ahora.toISOString(),
+            html: htmlClonado,
+            isAutoSave: true
+        };
+        
+        if (indiceExistente !== -1) {
+            // Actualizar autoguardado existente
+            proformasAuto[indiceExistente] = datosAutoguardado;
+        } else {
+            // Crear nuevo autoguardado
+            proformasAuto.push(datosAutoguardado);
+        }
+        
+        localStorage.setItem('proformas_autoguardadas', JSON.stringify(proformasAuto));
+        
+        // Mostrar indicador visual sutil de que se autoguardó
+        mostrarIndicadorAutoguardado();
+    }, 2000);
+}
+
+// Mostrar indicador visual de autoguardado
+function mostrarIndicadorAutoguardado() {
+    // Crear o actualizar indicador
+    let indicador = document.getElementById('autosave-indicator');
+    if (!indicador) {
+        indicador = document.createElement('div');
+        indicador.id = 'autosave-indicator';
+        indicador.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(6, 214, 160, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        `;
+        document.body.appendChild(indicador);
+    }
+    
+    const ahora = new Date().toLocaleTimeString('es-ES');
+    indicador.textContent = `✓ Autoguardado ${ahora}`;
+    indicador.style.opacity = '1';
+    
+    setTimeout(() => {
+        indicador.style.opacity = '0';
+    }, 2000);
+}
+
+// Función para crear una nueva proforma (reiniciar ID)
+function crearNuevaProforma() {
+    proformaId = generarProformaId();
+    // Limpiar campos si es necesario
+    // Esta función se puede llamar cuando el usuario quiere empezar una nueva proforma
+}
+
+// Inicializar al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    inicializarProformaId();
+    
+    // Configurar listeners para autoguardado en campos importantes
+    const nombreCliente = document.getElementById('nombreCliente');
+    if (nombreCliente) {
+        nombreCliente.addEventListener('input', function() {
+            autoguardarProforma();
+        });
+    }
+    
+    // Autoguardado cuando cambia el producto seleccionado
+    const selectProducto = document.getElementById('producto');
+    if (selectProducto) {
+        selectProducto.addEventListener('change', function() {
+            autoguardarProforma();
+        });
+    }
+    
+    // Autoguardado cuando cambian cantidad o precio
+    const cantidad = document.getElementById('cantidad');
+    if (cantidad) {
+        cantidad.addEventListener('input', function() {
+            autoguardarProforma();
+        });
+    }
+    
+    const precioProducto = document.getElementById('precioProducto');
+    if (precioProducto) {
+        precioProducto.addEventListener('input', function() {
+            autoguardarProforma();
+        });
+    }
+    
+    const nombreProducto = document.getElementById('nombreProducto');
+    if (nombreProducto) {
+        nombreProducto.addEventListener('input', function() {
+            autoguardarProforma();
+        });
+    }
+});
+
+// Función para limpiar la proforma y empezar una nueva
+function nuevaProforma() {
+    if (confirm('¿Estás seguro de que quieres crear una nueva proforma? Se perderán los datos actuales no guardados.')) {
+        // Crear nuevo ID de proforma
+        crearNuevaProforma();
+        
+        // Limpiar tabla de productos
+        const tabla = document.querySelector('table');
+        while (tabla.rows.length > 1) {
+            tabla.deleteRow(1);
+        }
+        
+        // Limpiar objeto productos
+        productos = {};
+        
+        // Limpiar campos de entrada
+        document.getElementById('nombreCliente').value = '';
+        document.getElementById('nombreProducto').value = '';
+        document.getElementById('precioProducto').value = '';
+        document.getElementById('cantidad').value = '1';
+        
+        // Limpiar vendedor si existe
+        const vendedorDisplay = document.getElementById('nombreVendedorDisplay');
+        if (vendedorDisplay) {
+            vendedorDisplay.textContent = '';
+        }
+        
+        // Resetear select de producto si existe
+        const selectProducto = document.getElementById('producto');
+        if (selectProducto) {
+            selectProducto.selectedIndex = 0;
+        }
+        
+        // Recalcular total
+        calcularTotal();
+        
+        // Mostrar confirmación
+        const indicador = document.createElement('div');
+        indicador.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(20, 184, 255, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 9999;
+            animation: popIn 300ms ease-out;
+        `;
+        indicador.textContent = '📄 Nueva proforma creada';
+        document.body.appendChild(indicador);
+        
+        setTimeout(() => {
+            document.body.removeChild(indicador);
+        }, 2000);
+    }
+}
+
+window.autoguardarProforma = autoguardarProforma;
+window.crearNuevaProforma = crearNuevaProforma;
+window.nuevaProforma = nuevaProforma;
+
 // Mostrar/ocultar la calculadora al hacer clic en el botón
 document.addEventListener('DOMContentLoaded', function() {
     var calcBtn = document.getElementById('calculator-btn');
@@ -1959,6 +2199,9 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             calcularTotal();
+            
+            // Activar autoguardado cuando se agrega un producto
+            autoguardarProforma();
 
             // Guardar la selección actual del producto antes de limpiar
             const selectProducto = document.getElementById("producto");
@@ -2185,78 +2428,170 @@ document.addEventListener('DOMContentLoaded', function() {
     // Mostrar resultados
     
     document.getElementById("total").innerHTML = "Total: $" + totalConIVA.toFixed(2);
+    
+    // Activar autoguardado cuando se recalcula el total
+    if (window.autoguardarProforma) {
+        autoguardarProforma();
+    }
 }   
 
     function cargarPagina() {
-    // Modal con lista de proformas guardadas en localStorage
+    // Modal con pestañas para proformas guardadas manualmente y autoguardadas
     if (document.getElementById('modal-lista-proformas')) return;
     const overlay = document.createElement('div');
     overlay.id = 'modal-lista-proformas';
     overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    
     const box = document.createElement('div');
-    box.style.cssText = 'background:#fff;padding:18px 20px 14px 20px;border-radius:14px;min-width:260px;max-width:96vw;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-24px) scale(0.96);animation:popIn 320ms cubic-bezier(.2,1.2,.3,1) forwards;';
-    box.innerHTML = `<div style=\"font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;\">Proformas guardadas</div>`;
-    // Soporte experimental File System Access API
-    // Eliminado el botón experimental de seleccionar carpeta
-    // Listado localStorage (siempre disponible)
-    let proformas = [];
-    try {
-        proformas = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
-    } catch(e) { proformas = []; }
-    if (!Array.isArray(proformas)) proformas = [];
-    if (proformas.length === 0) {
-        box.innerHTML += '<div style="padding:14px 6px;color:#888;">No hay proformas guardadas.<br>Guarda una proforma primero.</div>';
-    } else {
-        proformas.slice().reverse().forEach((item, idx, arr) => {
-            // El índice real en el array original (sin invertir)
-            const realIdx = proformas.length - 1 - idx;
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;gap:6px;';
-            const info = document.createElement('div');
-            info.innerHTML = `<div style=\'font-weight:600\'>${item.name || 'proforma_' + (realIdx+1)}</div><div style=\'font-size:11px;color:#666\'>${item.savedAt ? new Date(item.savedAt).toLocaleString() : ''}</div>`;
-            const openBtn = document.createElement('button');
-            openBtn.textContent = 'Abrir';
-            openBtn.className = 'inventory-action-btn';
-            openBtn.style.background = '#14b8ff';
-            openBtn.style.color = '#fff';
-            openBtn.onclick = function() {
-                overlay.remove();
-                cargarProformaEnPagina(item.html);
-            };
-            // Botón eliminar
-            const delBtn = document.createElement('button');
-            delBtn.textContent = 'Eliminar';
-            delBtn.className = 'inventory-action-btn btn-rojo';
-            delBtn.style.background = '#ff3864';
-            delBtn.style.color = '#fff';
-            delBtn.onclick = function() {
-                if (!confirm('¿Eliminar esta proforma guardada?')) return;
-                let proformasActuales = [];
-                try {
-                    proformasActuales = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
-                } catch(e) { proformasActuales = []; }
-                if (!Array.isArray(proformasActuales)) proformasActuales = [];
-                // Buscar por nombre y fecha para evitar errores de índice
-                const idxEliminar = proformasActuales.findIndex(p => p && p.name === item.name && p.savedAt === item.savedAt);
-                if (idxEliminar !== -1 && proformasActuales[idxEliminar]) {
-                    proformasActuales.splice(idxEliminar, 1);
-                    localStorage.setItem('proformas_guardadas', JSON.stringify(proformasActuales));
-                }
-                overlay.remove();
-                cargarPagina();
-            };
-            row.appendChild(info); row.appendChild(openBtn); row.appendChild(delBtn); box.appendChild(row);
-        });
+    box.style.cssText = 'background:#fff;padding:0;border-radius:14px;min-width:400px;max-width:90vw;max-height:80vh;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-24px) scale(0.96);animation:popIn 320ms cubic-bezier(.2,1.2,.3,1) forwards;overflow:hidden;';
+    
+    // Header con título
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:18px 20px 10px 20px;border-bottom:1px solid #f0f0f0;';
+    header.innerHTML = '<div style="font-weight:700;font-size:16px;text-align:center;">Proformas guardadas</div>';
+    
+    // Pestañas
+    const tabContainer = document.createElement('div');
+    tabContainer.style.cssText = 'display:flex;border-bottom:1px solid #e0e0e0;';
+    
+    const tabManual = document.createElement('button');
+    tabManual.textContent = '💾 Guardado Manual';
+    tabManual.style.cssText = 'flex:1;padding:12px;border:none;background:#f8f9fa;cursor:pointer;font-size:14px;border-bottom:2px solid #14b8ff;color:#14b8ff;font-weight:600;';
+    
+    const tabAuto = document.createElement('button');
+    tabAuto.textContent = '🔄 Autoguardado';
+    tabAuto.style.cssText = 'flex:1;padding:12px;border:none;background:#f8f9fa;cursor:pointer;font-size:14px;border-bottom:2px solid transparent;color:#666;';
+    
+    // Contenedor de contenido
+    const contentContainer = document.createElement('div');
+    contentContainer.style.cssText = 'padding:15px 20px;max-height:400px;overflow-y:auto;';
+    
+    // Función para mostrar lista de proformas
+    function mostrarListaProformas(tipo) {
+        contentContainer.innerHTML = '';
+        
+        let proformas = [];
+        const storageKey = tipo === 'manual' ? 'proformas_guardadas' : 'proformas_autoguardadas';
+        
+        try {
+            proformas = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        } catch(e) { 
+            proformas = []; 
+        }
+        if (!Array.isArray(proformas)) proformas = [];
+        
+        if (proformas.length === 0) {
+            const emptyMsg = tipo === 'manual' 
+                ? 'No hay proformas guardadas manualmente.<br>Usa el botón "💾 Guardar Proforma" para crear una.'
+                : 'No hay autoguardados disponibles.<br>Los autoguardados se crean automáticamente al modificar la proforma.';
+            contentContainer.innerHTML = `<div style="padding:20px 6px;color:#888;text-align:center;">${emptyMsg}</div>`;
+        } else {
+            proformas.slice().reverse().forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:8px;';
+                
+                const info = document.createElement('div');
+                const iconoTipo = tipo === 'manual' ? '💾' : '🔄';
+                info.innerHTML = `
+                    <div style='font-weight:600;display:flex;align-items:center;gap:6px;'>
+                        ${iconoTipo} ${item.name || 'proforma_' + (idx+1)}
+                    </div>
+                    <div style='font-size:11px;color:#666;margin-top:2px;'>
+                        ${item.savedAt ? new Date(item.savedAt).toLocaleString('es-ES') : ''}
+                        ${tipo === 'auto' ? ' (Automático)' : ''}
+                    </div>
+                `;
+                
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.style.cssText = 'display:flex;gap:6px;';
+                
+                const openBtn = document.createElement('button');
+                openBtn.textContent = 'Abrir';
+                openBtn.className = 'inventory-action-btn';
+                openBtn.style.cssText = 'background:#14b8ff;color:#fff;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;';
+                openBtn.onclick = function() {
+                    overlay.remove();
+                    cargarProformaEnPagina(item.html);
+                    // Si se carga una proforma, crear nuevo ID para evitar sobrescribir
+                    if (tipo === 'manual' || tipo === 'auto') {
+                        crearNuevaProforma();
+                    }
+                };
+                
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Eliminar';
+                delBtn.className = 'inventory-action-btn';
+                delBtn.style.cssText = 'background:#ff3864;color:#fff;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;';
+                delBtn.onclick = function() {
+                    const tipoTexto = tipo === 'manual' ? 'guardada manualmente' : 'autoguardada';
+                    if (!confirm(`¿Eliminar esta proforma ${tipoTexto}?`)) return;
+                    
+                    let proformasActuales = [];
+                    try {
+                        proformasActuales = JSON.parse(localStorage.getItem(storageKey) || '[]');
+                    } catch(e) { 
+                        proformasActuales = []; 
+                    }
+                    if (!Array.isArray(proformasActuales)) proformasActuales = [];
+                    
+                    // Buscar por datos únicos para evitar errores
+                    const idxEliminar = proformasActuales.findIndex(p => 
+                        p && p.name === item.name && p.savedAt === item.savedAt
+                    );
+                    if (idxEliminar !== -1) {
+                        proformasActuales.splice(idxEliminar, 1);
+                        localStorage.setItem(storageKey, JSON.stringify(proformasActuales));
+                    }
+                    
+                    // Refrescar la vista actual
+                    mostrarListaProformas(tipo);
+                };
+                
+                buttonsContainer.appendChild(openBtn);
+                buttonsContainer.appendChild(delBtn);
+                row.appendChild(info);
+                row.appendChild(buttonsContainer);
+                contentContainer.appendChild(row);
+            });
+        }
     }
-    // Botón cerrar
+    
+    // Event listeners para pestañas
+    tabManual.onclick = function() {
+        // Activar pestaña manual
+        tabManual.style.cssText = 'flex:1;padding:12px;border:none;background:#fff;cursor:pointer;font-size:14px;border-bottom:2px solid #14b8ff;color:#14b8ff;font-weight:600;';
+        tabAuto.style.cssText = 'flex:1;padding:12px;border:none;background:#f8f9fa;cursor:pointer;font-size:14px;border-bottom:2px solid transparent;color:#666;';
+        mostrarListaProformas('manual');
+    };
+    
+    tabAuto.onclick = function() {
+        // Activar pestaña auto
+        tabAuto.style.cssText = 'flex:1;padding:12px;border:none;background:#fff;cursor:pointer;font-size:14px;border-bottom:2px solid #06d6a0;color:#06d6a0;font-weight:600;';
+        tabManual.style.cssText = 'flex:1;padding:12px;border:none;background:#f8f9fa;cursor:pointer;font-size:14px;border-bottom:2px solid transparent;color:#666;';
+        mostrarListaProformas('auto');
+    };
+    
+    // Footer con botón cerrar
     const footer = document.createElement('div');
-    footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;gap:8px;';
+    footer.style.cssText = 'padding:15px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:center;';
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'Cerrar';
-    closeBtn.className = 'inventory-action-btn';
+    closeBtn.style.cssText = 'padding:8px 20px;background:#6c757d;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;';
     closeBtn.onclick = () => overlay.remove();
-    footer.appendChild(closeBtn); box.appendChild(footer);
-    overlay.appendChild(box); document.body.appendChild(overlay);
+    footer.appendChild(closeBtn);
+    
+    // Ensamblar modal
+    tabContainer.appendChild(tabManual);
+    tabContainer.appendChild(tabAuto);
+    box.appendChild(header);
+    box.appendChild(tabContainer);
+    box.appendChild(contentContainer);
+    box.appendChild(footer);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    
+    // Mostrar por defecto la pestaña de guardado manual
+    mostrarListaProformas('manual');
 }
 
 // Cargar la proforma seleccionada en la misma página (DOM)
