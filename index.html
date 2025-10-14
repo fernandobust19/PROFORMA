@@ -1,41 +1,2527 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <!-- Copiado desde proforma.html -->
-    <meta charset="UTF-8">
-    <title>Proforma de Productos UP-CONS</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.3.2/html2canvas.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="js/pedido.js"></script>
-    <!-- ...resto de los estilos y scripts... -->
-</head>
-<body onload="cargarPagina(); inicializarProductos();">
-    <!-- TODO: Pega aquí el contenido completo de tu proforma.html -->
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="es">
-<head>
         <meta charset="UTF-8">
         <title>Proforma de Productos UP-CONS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.3.2/html2canvas.min.js"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-        <script src="js/pedido.js"></script>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="favicon.png">
+    <meta name="theme-color" content="#ffffff">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
         <style>
-        .zoom-container {
-            transform: scale(0.60);
-            transform-origin: top center;
-            width: 166.66%;
+/* Tema NEON */
+:root {
+    /* Tema NEON CLARO */
+    --neon-bg: #f7fbff;
+    --neon-panel: rgba(255, 255, 255, 0.88);
+    --neon-primary: #14b8ff; /* cian */
+    --neon-secondary: #8b5cf6; /* violeta */
+    --neon-accent: #06d6a0; /* verde */
+    --neon-danger: #ff3864; /* rojo */
+    --neon-text: #102035; /* texto oscuro */
+    --neon-muted: #5b6b7c;
+}
+
+@keyframes neonPulse {
+    0%, 100% { filter: drop-shadow(0 0 6px rgba(58, 239, 255, 0.45)); }
+    50% { filter: drop-shadow(0 0 12px rgba(155, 92, 255, 0.45)); }
+}
+
+/* Animación para modales y elementos emergentes */
+@keyframes popIn {
+    from { transform: scale(0.9) translateY(10px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Estilo del botón flotante */
+#calculator-btn {
+    position: fixed;
+    top: 20px;
+    left: 210px; /* Más a la izquierda */
+    width: 105px;  /* 15% más grande */
+    height: 105px; /* 15% más grande */
+    border-radius: 10px;
+    object-fit: contain;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    transition: transform 0.15s ease;
+    z-index: 9999;
+    outline: none; /* Evita el recuadro de foco */
+    -webkit-tap-highlight-color: transparent; /* Evita el resaltado en móviles */
+    display: inline-block;
+}
+
+#calculator-btn.dragging {
+    transform: scale(1.02);
+}
+
+/* Efecto de hundido al presionar el ícono de la calculadora */
+#calculator-btn:active {
+    transform: translateY(1px) scale(0.98);
+}
+
+/* Estilo de la calculadora (neon) */
+#calculator {
+    position: fixed;
+    top: 85px; /* Más abajo */
+    right: 10px;
+    width: 260px;
+    background: var(--neon-panel);
+    border: 1px solid rgba(20,184,255,0.35);
+    border-radius: 14px;
+    padding: 10px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 0 18px rgba(20,184,255,0.18), 0 0 26px rgba(139,92,246,0.15);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 9998; 
+    display: none; /* Oculta por defecto */
+}
+
+/* Pantalla */
+#calc-display {
+    margin-bottom: 10px;
+}
+
+#calc-output {
+    width: 100%;
+    height: 52px; /* más pequeño */
+    background: #ffffff;
+    color: var(--neon-text);
+    font-size: 24px; /* más pequeño */
+    letter-spacing: 0.5px;
+    text-align: right;
+    border: 1px solid rgba(20,184,255,0.3);
+    padding: 8px 12px;
+    border-radius: 10px;
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.05), 0 0 0 1px rgba(255,255,255,0.7) inset;
+    text-shadow: none;
+    box-sizing: border-box; /* evita desbordes */
+    overflow: hidden;
+}
+
+/* Botones */
+#calc-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+/* Botones NEON */
+#calc-buttons .btn {
+    width: 100%;
+    height: 48px; /* más compacto */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #ffffff, #f3f7ff);
+    color: var(--neon-text);
+    font-size: 18px;
+    border: 1px solid rgba(16,32,53,0.08);
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.8) inset, 0 4px 10px rgba(0, 0, 0, 0.08);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+#calc-buttons .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.9) inset, 0 6px 12px rgba(0,0,0,0.1), 0 0 10px rgba(20,184,255,0.18);
+}
+
+#calc-buttons .btn:active {
+    transform: translateY(1px); /* Se hunde un poco */
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.7) inset; /* Sombra interior */
+}
+
+/* Variantes */
+#calc-buttons .btn-num { /* números y punto */
+    color: var(--neon-text);
+}
+
+#calc-buttons .btn-op {
+    color: var(--neon-secondary);
+    border-color: rgba(139,92,246,0.35);
+    text-shadow: none;
+}
+
+#calc-buttons .btn-ctrl { /* clear */
+    color: var(--neon-danger);
+    border-color: rgba(255,56,100,0.35);
+}
+
+/* Igual (=) especial */
+#equal-btn.btn-equal {
+    grid-row: span 2;
+    background: linear-gradient(180deg, rgba(139,92,246,0.95), rgba(20,184,255,0.95));
+    color: #0a1a29;
+    font-size: 22px;
+    font-weight: 800;
+    border-color: rgba(20,184,255,0.45);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.9) inset,
+                0 8px 18px rgba(0,0,0,0.12),
+                0 0 16px rgba(20,184,255,0.35),
+                0 0 26px rgba(139,92,246,0.25);
+    animation: neonPulse 4s ease-in-out infinite;
+}
+
+
+
+
+
+
+/* Botones estilo modernos tipo app, colores según la imagen adjunta, tamaño compacto, sin flechas ni brillo */
+.proforma-action-btn, .action-button {
+    font-size: 12px;
+    padding: 5px 18px 5px 14px;
+    min-width: 100px;
+    border: none;
+    border-radius: 22px;
+    box-shadow: 0 2px 8px #0002, 0 0 0 1.5px #bbb, 0 2px 6px #fff8 inset;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: background 0.18s, transform 0.12s, box-shadow 0.12s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+    outline: none; /* Doble seguridad para quitar el recuadro de foco */
+    -webkit-tap-highlight-color: transparent; /* Elimina el recuadro de toque en móviles */
+}
+/* Colores individuales */
+.btn-rojo {
+    background: linear-gradient(180deg, #b0b3b8 0%, #6c6f75 100%);
+    color: #fff;
+    border: none;
+}
+.btn-verde {
+    background: linear-gradient(180deg, #7be676 0%, #2ecc40 100%);
+    color: #fff;
+    border: none;
+}
+.btn-azul {
+    background: linear-gradient(180deg, #4da6ff 0%, #0056b3 100%);
+    color: #fff;
+    border: none;
+}
+.btn-celeste {
+    background: linear-gradient(180deg, #a0d8ef 0%, #67b8de 100%);
+    color: #102035; /* Texto oscuro para mejor contraste */
+    border: none;
+}
+.proforma-action-btn:hover, .action-button:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 12px #0003, 0 0 0 2px #fff, 0 0 10px #fff8 inset;
+}
+.proforma-action-btn:active, .action-button:active {
+    /* Efecto de hundido al presionar */
+    transform: translateY(1px) scale(0.98);
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.2);
+}
+
+    /* Estilos específicos para el footer del modal de inventario */
+    #inventory-view { position: relative; }
+    .inventory-footer {
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(250,250,250,0.95));
+        padding: 10px 6px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+        border-top: 1px solid #eee;
+    }
+
+    .inventory-action-btn {
+        min-width: 130px;
+        height: 40px;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 13px; /* Tamaño de fuente reducido para mejor ajuste */
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    /* Efecto de hundido para los botones del inventario */
+    .inventory-action-btn:active {
+        transform: translateY(1px);
+        box-shadow: inset 0 2px 5px rgba(0,0,0,0.15);
+    }
+
+    @media (max-width: 540px) {
+        .inventory-footer { flex-direction: column; gap: 10px; padding: 12px; }
+        .inventory-action-btn { width: 100%; min-width: unset; }
+        #inventory-view { padding-bottom: 80px; }
+    }
+
+    #main-title {
+        cursor: pointer;
+        user-select: none; /* Evita que el texto se seleccione al hacer clic */
+        outline: none; /* Evita el recuadro de foco */
+        -webkit-tap-highlight-color: transparent; /* Evita el resaltado en móviles */
+        transition: filter 0.2s ease, transform 0.2s ease;
+        display: inline-block; /* Para que el hover no ocupe toda la línea */
+        height: 70px; /* Altura del logo */
+        vertical-align: middle;
+    }
+    #main-title:hover {
+        /* Efecto de brillo para la imagen */
+        filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9));
+        transform: scale(1.03); /* Ligero zoom al pasar el mouse */
+    }
+
+
+
+    body {
+        font-family: 'Arial', sans-serif;
+        background-color: #f5f5dc; /* Color beige para mejorar rendimiento */
+        margin: 0;
+        padding: 20px;
+        font-size: 12px;
+        min-height: 100vh;
+    }
+    .panel-translucido {
+        background: rgba(255, 255, 255, 0.90); /* Un poco más opaco para legibilidad */
+        backdrop-filter: blur(8px); /* Efecto "vidrio esmerilado" */
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 12px;
+        padding: 15px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
+    }
+    @keyframes border-glow-animation {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    select, input[type="text"], input[type="number"], input[type="password"] {
+        width: 100%;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        border: 1.5px solid rgba(20, 184, 255, 0.4); /* Borde más grueso y con color */
+        border-radius: 10px;
+        font-size: 16px;
+        background-color: #fff;
+        color: var(--neon-text);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        box-sizing: border-box;
+    }
+    /* Estilo de foco para inputs, con animación de brillo */
+    input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus {
+        outline: none;
+        border-color: var(--neon-primary);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.06), 0 0 0 3px rgba(20, 184, 255, 0.15);
+        animation: border-glow-animation 3s ease-in-out infinite;
+    }
+    /* Estilo de foco para select, sin la animación que movía la flecha */
+    select:focus {
+        outline: none;
+        border-color: var(--neon-primary);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.06), 0 0 0 3px rgba(20, 184, 255, 0.15);
+    }
+    /* Estilos específicos para el campo de nombre de cliente */
+    #nombreCliente {
+        background-color: #ffffff;
+        border: none;
+        box-shadow: none;
+        font-style: italic;
+    }
+    #nombreCliente:focus {
+        box-shadow: none;
+        animation: none;
+    }
+    .formulario {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    select {
+        padding-right: 35px; /* Espacio para que la flecha no se superponga con el texto */
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 16px 12px;
+    }
+
+    button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+        outline: none; /* Evita el recuadro azul al hacer clic */
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: relative;
+        table-layout: fixed;
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 4px;
+        text-align: left;
+        font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    /* Celdas editables */
+    td.editable-cell {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    td.editable-cell:hover {
+        background-color: rgba(0, 123, 255, 0.05);
+    }
+    
+    th {
+        background-color: #007bff;
+        color: white;
+    }
+    .proforma-container {
+        /* Usamos el nuevo estilo de panel, pero mantenemos el overflow */
+        max-height: 100vh;
+        overflow-y: auto;
+        overflow-x: visible;
+        /* El resto de estilos (fondo, padding, etc.) vienen de .panel-translucido */
+    }
+    #contenido {
+        position: relative;
+        overflow-x: hidden;
+    }
+    .item-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .item-details {
+        flex-grow: 1;
+        font-size: 10px;
+    }
+    .edit-icon, .close-btn {
+        font-size: 16px;
+        cursor: pointer;
+    }
+    .close-btn {
+        color: red;
+        border: none;
+        background: transparent;
+    }
+
+    /* Estilo para los inputs de edición en la tabla de proforma */
+    .editing-input {
+        width: 150%;
+        padding: 4px;
+        font-size: 12px;
+        font-weight: normal;
+        font-family: 'Arial', sans-serif;
+        color: #000;
+        border: 1px solid #007bff;
+        border-radius: 2px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1000;
+        outline: none;
+        box-sizing: border-box;
+        line-height: 1.4;
+        margin: 0;
+        height: 28px;
+        display: block;
+        position: relative;
+    }
+
+    .editing-input:focus {
+        border-color: #0056b3;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        background: #fff;
+    }
+
+    /* Fila en modo edición */
+    tr.editing-row {
+        background: transparent !important;
+    }
+
+    tr.editing-row td {
+        position: static;
+        padding: 4px;
+    }
+
+    /* Celdas con inputs */
+    tr.editing-row td.editing-cell {
+        position: static;
+    }
+
+    /* Estilo para los botones "Agregar Producto" y "Guardar como Imagen" */
+    .action-buttons-container {
+        display: flex;
+        justify-content: space-between; /* Para que estén uno al lado del otro */
+        width: 100%;
+        gap: 10px; /* Espacio entre los botones */
+        margin-top: 10px; /* Margen superior para separarlos de otros elementos */
+    }
+
+    .action-button { /* Estilo base ya definido en .proforma-action-btn, .action-button */
+        flex: 1; /* Para que ambos botones ocupen el mismo espacio */
+    }
+
+    /* Estilos para el botón de acceso a inventario */
+    #accederBtn {
+        transition: background-color 0.3s ease, transform 0.1s ease;
+    }
+
+        .proforma-main-actions-container {
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+            margin-top: 18px;
+            margin-bottom: 28px;
+            gap: 12px;
+            align-items: center;
         }
-        /* ...resto de los estilos copiados... */
-        /* (Pega aquí todos los estilos de proforma.html) */
-        </style>
+
+        @media (max-width: 540px) { .proforma-main-actions-container { justify-content: center; } }
+
+        /* Contenedor principal para dividir proforma e inventario */
+        .main-sections-container {
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+            justify-content: center;
+            width: 100%;
+            margin-top: 18px;
+        }
+        /* Ajuste responsivo para móviles */
+        @media (max-width: 900px) {
+            .main-sections-container {
+                flex-direction: column;
+                gap: 18px;
+            }
+        }
+        .proforma-section, .inventario-section {
+            flex: 1 1 0;
+            min-width: 320px;
+            max-width: 600px;
+        }
+
+        /* Estilo para la barra de scroll de cantidad */
+        #cantidad-scrollbar {
+            /* La anchura es flexible */
+            height: 14px; /* Más gruesa */
+            background-color: #2ecc40; /* Verde */
+            border-radius: 7px;
+            cursor: ew-resize; /* Cursor para indicar scroll horizontal */
+            transition: background-color 0.2s ease;
+            flex-grow: 1; /* Ocupa el espacio disponible */
+            box-shadow: 0 0 0 1px #fff, 0 0 6px rgba(255,255,255,0.7); /* Borde blanco y resplandor */
+        }
+        #cantidad-scrollbar.scrolling {
+            background-color: #ffc107; /* Amarillo/Naranja al usarla */
+        }
+
+        /* Borde con gradiente para los campos de producto y precio */
+        #nombreProducto, #precioProducto {
+            border: 2px solid transparent; /* Borde más grueso y transparente */
+            background: linear-gradient(white, white) padding-box,
+                        linear-gradient(to right, #8b5cf6, #ffca7a) border-box;
+            /* Esta técnica asegura que el gradiente respete las esquinas redondeadas */
+        }
+
+        /* Mantener el borde con gradiente en el foco y añadir el brillo */
+        #nombreProducto:focus, #precioProducto:focus {
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06), 0 0 0 3px rgba(139, 92, 246, 0.2); /* Sombra violeta */
+            /* La animación de borde se desactiva para no interferir con el gradiente */
+            animation: none;
+        }
+
+        /* Estilo para el botón de limpiar búsqueda (lupa) */
+        .search-clear-btn {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--neon-primary); /* Color azul claro del tema */
+          cursor: pointer;
+          padding: 8px; /* Aumenta el área de clic */
+          transition: color 0.2s;
+          font-size: 2.1em; /* Hace la lupa más grande */
+        }
+        /* Cambia a violeta al pasar el mouse para dar feedback */
+        .search-clear-btn:hover { color: var(--neon-secondary); }
+
+    /* --- Clase para forzar el tema claro al guardar como imagen --- */
+    /* Clase para forzar tema claro al capturar imagen (ya no necesaria pero se mantiene por compatibilidad) */
+    .force-light-theme-for-capture {
+        background: #ffffff !important;
+    }
+
+    /* Estilos para las pestañas del inventario */
+    .inventory-tabs {
+        display: flex;
+        border-bottom: 1px solid #ccc;
+        margin-bottom: 10px;
+    }
+    .inventory-tab {
+        padding: 10px 15px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-bottom: -1px;
+        font-weight: 600;
+        color: #555;
+    }
+    .inventory-tab.active {
+        border-color: #ccc;
+        border-bottom: 1px solid white;
+        border-radius: 5px 5px 0 0;
+        color: #000;
+        background-color: white;
+    }
+    .inventory-tab-content { display: none; }
+    .inventory-tab-content.active { display: block; }
+    .output-indicator { color: #d9534f; font-weight: bold; margin-left: 5px; font-size: 13px; }
+
+    /* Estilo para el input de búsqueda en el inventario */
+    #inventory-search-container {
+        position: relative;
+        margin-bottom: 10px;
+    }
+    #inventory-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #aaa; }
+
+    /* Estilo para diferenciar campos de cantidad en inventario */
+    #outputs-list input[type="number"] {
+        background-color: #e6e6fa; /* Lila claro */
+        color: #102035; /* Texto negro */
+    }
+
+        [contenteditable]:focus {
+            outline: none;
+            font-size: 1em;
+        }
+    </style>
 </head>
-<body onload="cargarPagina(); inicializarProductos();">
-<!-- Pega aquí todo el contenido del body de proforma.html -->
-<h1>UP-CONS/FERRETERÍA</h1>
-<!-- ...resto del contenido copiado... -->
+
+<body onload="inicializarProductos();">
+
+    <!-- Calculadora (movida aquí para que exista en el DOM) -->
+    <div id="calculator">
+        <div id="calc-display">
+            <input type="text" id="calc-output" readonly>
+        </div>
+        <div id="calc-buttons">
+            <button class="btn btn-ctrl" onclick="clearOutput()">C</button>
+            <button class="btn btn-op" onclick="appendOperator('%')">%</button>
+            <button class="btn btn-op" onclick="appendOperator('/')">/</button>
+            <button class="btn btn-op" onclick="appendOperator('*')">x</button>
+            <button class="btn btn-num" onclick="appendNumber(7)">7</button>
+            <button class="btn btn-num" onclick="appendNumber(8)">8</button>
+            <button class="btn btn-num" onclick="appendNumber(9)">9</button>
+            <button class="btn btn-op" onclick="appendOperator('-')">-</button>
+            <button class="btn btn-num" onclick="appendNumber(4)">4</button>
+            <button class="btn btn-num" onclick="appendNumber(5)">5</button>
+            <button class="btn btn-num" onclick="appendNumber(6)">6</button>
+            <button class="btn btn-op" onclick="appendOperator('+')">+</button>
+            <button class="btn btn-num" onclick="appendNumber(1)">1</button>
+            <button class="btn btn-num" onclick="appendNumber(2)">2</button>
+            <button class="btn btn-num" onclick="appendNumber(3)">3</button>
+            <button id="equal-btn" class="btn btn-equal" onclick="calculateResult()">=</button>
+            <button class="btn btn-num" onclick="appendNumber(0)" style="grid-column: span 2;">0</button>
+            <button class="btn btn-num" onclick="appendDot()">.</button>
+        </div>
+    </div>
+
+                <div style="position:relative;min-height:54px;margin-bottom:8px;">
+                    <img id="main-title" src="logo.png" alt="UP-CONS IMPORTADOR" title="UP-CONS IMPORTADOR">
+                    <img id="calculator-btn" src="calculadora.png" alt="Abrir calculadora" title="Calculadora" style="position:absolute;top:-18px;right:-8px;z-index:10;width:92px;height:92px;" />
+                    <!-- Contenido principal -->
+                    <div class="main-sections-container">
+                        <!-- Sección Proforma -->
+                        <div class="proforma-section">
+                            <div class="formulario">
+                                <div style="position: relative; width: 100%;">
+                                    <input type="text" id="buscador" placeholder="Buscar producto..." oninput="buscarProducto()" style="padding-right: 50px;">
+                                    <i class="fas fa-search search-clear-btn" onclick="limpiarBuscador()"></i>
+                                </div>
+                                <select id="producto" onchange="copiarNombreYPrecio()"></select>
+                                <div style="display: flex; gap: 8px; width: 100%; align-items: center; margin-bottom: 8px;">
+                                    <input type="text" id="nombreProducto" placeholder="Nombre del Producto" style="flex-grow: 1; font-size: 16px;">
+                                    <div style="position: relative; display: flex; align-items: center;">
+                                        <span style="position: absolute; left: 10px; font-size: 16px; color: #555; pointer-events: none;">$</span>
+                                        <input type="number" id="precioProducto" placeholder="Precio" step="0.01" style="width: 110px; font-size: 16px; padding-left: 24px;">
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%;">
+                                    <label for="cantidad" style="font-size: 15px; font-weight: bold; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 6px rgba(255,255,255,0.8);">CANT.</label>
+                                    <input type="number" id="cantidad" placeholder="Cant." min="1" value="1" style="width: 65px; font-size: 16px; text-align: center; margin-bottom: 0;">
+                                    <div id="cantidad-scrollbar" title="Use la rueda del ratón o deslice para cambiar la cantidad"></div>
+                                </div>
+                            </div>
+                            <div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
+                                <button id="agregarBtn" class="action-button btn-verde btn-small" style="margin-right: auto;" onclick="agregarProducto()">✅ Agregar producto</button>
+                                <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
+                            </div>
+                            <div class="proforma-main-actions-container">
+                                <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
+                                <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
+                            </div>
+                            <div class="proforma-container panel-translucido" id="proforma">
+                                <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
+                                    <img src="logo.png" alt="Up-cons logo" style="height:50px;vertical-align:middle;display:inline-block;">
+                                </div>
+                                <div style="font-size:11px; color:#111; margin-bottom: 10px;">Direccion: Quito / Av. Ecuatoriana y Martín Santiago Icaza S44-65 <br>
+                                    Sucursal. Av Mariscal Sucre y Arturo Tipanguano <br> Telf: 0983801298 - 0995986366</div>
+                                <div>
+                                    <label for="nombreCliente" style="font-size:11px;">Cliente:</label>
+                                    <input type="text" id="nombreCliente" placeholder="Nombre del Cliente" style="width: 180px; font-size:12px; padding:3px 6px;">
+                                </div>
+                                <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
+                                <table>
+                                    <tr>
+                                        <th style="width: 50%;">Producto</th>
+                                        <th style="width: 15%;">Cant.</th>
+                                        <th style="width: 17%;">Precio Uni.</th>
+                                        <th style="width: 18%;">Subtotal</th>
+                                    </tr>
+                                </table>
+                                <h2 id="subtotal" style="font-size: 9px;"> </h2>
+                                <h2 id="iva" style="font-size: 8px;"></h2>
+                                <h2 id="total" style="font-size: 15px;">Total: $0.00</h2>
+                                <div style="margin-top: 6px; font-size: 11px;">
+                                    <span><b>Vendedor:</b> <span id="nombreVendedorDisplay" style="font-weight: bold;"></span></span><br>
+                                    <span id="fechaProforma"></span><br>
+                                    <span style="color:#007bff; font-size:12px;">www.conupcons.com</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Sección Inventario -->
+                        <div class="inventario-section">
+                            <!-- Modal de Inventario (oculto inicialmente). No se puede cerrar hasta presionar 'Guardar y Cerrar'. -->
+                            <div id="inventory-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;">
+                                <div id="inventory-view" style="background:#fff;width:92%;max-width:920px;max-height:88vh;overflow:auto;padding:16px;border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,0.25);margin:4vh auto;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                        <h3 style="margin:0;">Inventario de Productos</h3>
+                                        <div style="display:flex;gap:8px;">
+                                            <button id="export-pdf-btn" class="proforma-action-btn btn-azul" onclick="saveInventoryPDF()">📄 Exportar Inventario</button>
+                                        </div>
+                                    </div>
+                                    <!-- Buscador para el inventario -->
+                                    <div id="inventory-search-container">
+                                        <i id="inventory-search-icon" class="fas fa-search"></i>
+                                        <input type="text" id="inventory-search" placeholder="Buscar producto en inventario..." oninput="filterInventory()" style="width: 100%; padding-left: 35px;">
+                                    </div>
+                                    <!-- Pestañas de Inventario y Salidas -->
+                                    <div class="inventory-tabs">
+                                        <div class="inventory-tab active" onclick="switchInventoryTab('entradas')">INVENTARIO (ENTRADAS)</div>
+                                        <div class="inventory-tab" onclick="switchInventoryTab('salidas')">SALIDAS</div>
+                                    </div>
+                                    <!-- Contenido de las pestañas -->
+                                    <div id="tab-content-entradas" class="inventory-tab-content active">
+                                        <div id="inventory-list" style="max-height:55vh;overflow:auto;padding-top:8px;"></div>
+                                    </div>
+                                    <div id="tab-content-salidas" class="inventory-tab-content">
+                                        <div id="outputs-list" style="max-height:55vh;overflow:auto;padding-top:8px;"></div>
+                                    </div>
+                                    <div class="inventory-footer">
+                                        <div style="display:flex;gap:8px;align-items:center;">
+                                            <button id="add-new-inventory-item-btn" class="inventory-action-btn" style="background:#06d6a0;color:#fff;min-width:50px;" onclick="addNewInventoryRow()" title="Añadir nuevo producto">+</button>
+                                            <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
+                                            <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">Borrar borrador</button>
+                                            <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">Guardar y Cerrar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+<script>
+// Mostrar la fecha actual en la proforma
+function mostrarFechaProforma() {
+    var fecha = new Date();
+    var opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    var fechaTexto = 'Fecha: ' + fecha.toLocaleDateString('es-EC', opciones);
+    document.getElementById('fechaProforma').textContent = fechaTexto;
+}
+mostrarFechaProforma();
+</script>
+<script>
+
+// ----- INVENTARIO: funciones para manejar la vista y exportación -----
+function openInventory() {
+    document.getElementById('inventory-modal').style.display = 'flex';
+    // Asegurarse de que la pestaña de entradas esté activa por defecto
+    switchInventoryTab('entradas');
+    // cargar productos desde el select #producto si está disponible
+    loadProductsForInventory();
+    // restaurar borrador si existe
+    restoreInventoryDraft();
+    // prevenir cierre accidental de la pestaña/ventana mientras se realiza el inventario
+    document.getElementById('inventory-search').value = ''; // Limpiar buscador
+    window.addEventListener('beforeunload', preventUnload);
+}
+
+// closeInventory ya no permite cerrar el modal; usar saveInventoryAndClose()
+function closeInventory() {
+    console.log('El inventario no puede cerrarse sin guardar. Usa Guardar y Cerrar.');
+}
+
+function saveInventoryAndClose() {
+    // Al guardar, pedimos un nombre para el inventario y lo guardamos en el registro de inventarios guardados
+    const draft = collectInventoryData();
+    const salidas = collectOutputsData();
+    // Si no hay datos, avisar
+    const entriesEntradas = Object.values(draft).some(v => v && v !== '0');
+    const entriesSalidas = Object.values(salidas).some(v => v && v !== '0');
+    if (!entriesEntradas && !entriesSalidas) return alert('No hay cantidades registradas para guardar.');
+    // mostrar modal para nombrar
+    showInventoryNameModal(async function(nombre) {
+        if (!nombre) nombre = 'inventario_' + new Date().toISOString();
+        // cargar inventarios existentes
+        const lista = getSavedInventories();
+        // Guardar tanto entradas como salidas
+        lista.push({ name: nombre, savedAt: new Date().toISOString(), data: draft, salidas: salidas });
+        setSavedInventories(lista);
+        // mantener compatibilidad: guardar también como inventario_final y meta
+        localStorage.setItem('inventario_final', JSON.stringify(draft));
+        const meta = { savedAt: new Date().toISOString(), storage: 'localStorage', key: 'inventario_final' };
+        localStorage.setItem('inventario_final_meta', JSON.stringify(meta));
+        // limpiar borrador temporal
+        localStorage.removeItem('inventario_draft');
+        localStorage.removeItem('salidas_draft');
+        // cerrar modal principal
+        document.getElementById('inventory-modal').style.display = 'none';
+        window.removeEventListener('beforeunload', preventUnload);
+        updateSaveInfo();
+        updateInventoryButtonState();
+        alert('Inventario guardado como "' + nombre + '".');
+    });
+}
+
+function openSavedInventory() {
+    // Mostrar una lista de inventarios guardados para seleccionar cuál abrir
+    renderSavedInventoryListModal();
+}
+
+// Gestión de múltiples inventarios guardados en localStorage bajo la clave 'inventarios_guardados'
+function getSavedInventories() {
+    try {
+        const raw = localStorage.getItem('inventarios_guardados');
+        if (!raw) return [];
+        return JSON.parse(raw);
+    } catch (e) { return []; }
+}
+
+function setSavedInventories(list) {
+    try {
+        localStorage.setItem('inventarios_guardados', JSON.stringify(list));
+    } catch (e) { console.error('No se pudo guardar inventarios:', e); }
+}
+
+function showInventoryNameModal(onSave) {
+    // crea modal simple con efecto "salto hacia al frente"
+    if (document.getElementById('modal-nombre-inventario')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-nombre-inventario';
+    overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:18px 20px;border-radius:12px;min-width:260px;max-width:90%;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-20px) scale(0.96);animation:popIn 260ms cubic-bezier(.2,.9,.3,1) forwards;';
+    box.innerHTML = `
+        <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Nombre del inventario</div>
+        <input id="input-nombre-inventario" type="text" placeholder="Ej: inventario_mayo_2025" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:14px;" />
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button id="btn-cancel-nombre-inv" style="padding:8px 12px;border-radius:8px;border:none;background:#eee;">Cancelar</button>
+            <button id="btn-save-nombre-inv" style="padding:8px 12px;border-radius:8px;border:none;background:#06d6a0;color:#fff;font-weight:700;">Guardar</button>
+        </div>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    // focus
+    const input = document.getElementById('input-nombre-inventario');
+    input.focus();
+    // handlers
+    document.getElementById('btn-cancel-nombre-inv').onclick = function() { overlay.remove(); };
+    document.getElementById('btn-save-nombre-inv').onclick = function() {
+        const val = (input.value || '').trim();
+        overlay.remove();
+        if (typeof onSave === 'function') onSave(val);
+    };
+    input.onkeydown = function(e) { if (e.key === 'Enter') { document.getElementById('btn-save-nombre-inv').click(); } };
+}
+
+function renderSavedInventoryListModal() {
+    const list = getSavedInventories();
+    // crear overlay
+    if (document.getElementById('modal-lista-inventarios')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-lista-inventarios';
+    overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:14px;border-radius:12px;min-width:320px;max-width:92%;max-height:80vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,0.25);';
+    const header = document.createElement('div'); header.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+    header.innerHTML = `<div style="font-weight:700">Inventarios guardados</div><div style="font-size:12px;color:#666">${list.length} guardado(s)</div>`;
+    box.appendChild(header);
+    if (list.length === 0) {
+        const p = document.createElement('div'); p.style.padding='12px 6px'; p.textContent = 'No hay inventarios guardados.'; box.appendChild(p);
+    } else {
+        list.slice().reverse().forEach((item, idx) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #f0f0f0;gap:6px;';
+            const info = document.createElement('div');
+            const dt = new Date(item.savedAt);
+            info.innerHTML = `<div style="font-weight:600">${item.name}</div><div style="font-size:11px;color:#666">${dt.toLocaleString()}</div>`;
+            const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+            const openBtn = document.createElement('button'); openBtn.textContent='Abrir'; openBtn.className='inventory-action-btn'; openBtn.style.background='#14b8ff;color:#fff;';
+            const delBtn = document.createElement('button'); delBtn.textContent='Eliminar'; delBtn.className='inventory-action-btn btn-rojo';
+            openBtn.onclick = function() {
+                // cargar este inventario en el modal principal
+                overlay.remove();
+                const realIndex = list.length - 1 - idx; // porque iteramos reverse
+                loadNamedInventory(realIndex);
+            };
+            delBtn.onclick = function() {
+                if (!confirm('¿Eliminar este inventario guardado?')) return;
+                const realIndex = list.length - 1 - idx;
+                const newList = getSavedInventories();
+                newList.splice(realIndex,1);
+                setSavedInventories(newList);
+                overlay.remove();
+                renderSavedInventoryListModal();
+                updateSaveInfo();
+            };
+            actions.appendChild(openBtn); actions.appendChild(delBtn);
+            row.appendChild(info); row.appendChild(actions); box.appendChild(row);
+        });
+    }
+    // footer actions
+    const footer = document.createElement('div'); footer.style.cssText='display:flex;justify-content:flex-end;margin-top:8px;gap:8px;';
+    const closeBtn = document.createElement('button'); closeBtn.textContent='Cerrar'; closeBtn.className='inventory-action-btn'; closeBtn.onclick = () => overlay.remove();
+    footer.appendChild(closeBtn); box.appendChild(footer);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+function loadNamedInventory(index) {
+    const list = getSavedInventories();
+    if (!list || !list[index]) return alert('Inventario no encontrado.');
+    const item = list[index];
+    const data = item.data || {};
+    const salidas = item.salidas || {};
+    // abrir modal principal y poblar
+    document.getElementById('inventory-modal').style.display = 'flex';
+    document.getElementById('inventory-search').value = ''; // Limpiar buscador
+    loadProductsForInventory();
+    setTimeout(() => {
+        Array.from(document.querySelectorAll('#inventory-list > div')).forEach(r => {
+            const name = r.querySelector('div').textContent.trim();
+            if (data[name] !== undefined) r.querySelector('input').value = data[name];
+            else r.querySelector('input').value = '';
+        });
+        Array.from(document.querySelectorAll('#outputs-list > div')).forEach(r => {
+            const name = r.querySelector('div').textContent.trim();
+            if (salidas[name] !== undefined) r.querySelector('input').value = salidas[name];
+        });
+        filterInventory(); // Aplicar filtro por si acaso
+        window.addEventListener('beforeunload', preventUnload);
+    }, 120);
+}
+
+
+function updateSaveInfo() {
+    const metaRaw = localStorage.getItem('inventario_final_meta');
+    const infoEl = document.getElementById('inventory-save-info');
+    if (!infoEl) return;
+    if (!metaRaw) {
+        infoEl.textContent = '';
+        return;
+    }
+    try {
+        const meta = JSON.parse(metaRaw);
+        const dt = new Date(meta.savedAt);
+        infoEl.textContent = `Guardado: ${dt.toLocaleString()} (almacenado localmente)`;
+    } catch (e) { infoEl.textContent = ''; }
+}
+
+// actualizar información al cargar
+window.addEventListener('DOMContentLoaded', updateSaveInfo);
+
+function preventUnload(e) {
+    e = e || window.event;
+    // Cancel the event
+    if (e) e.returnValue = 'Hay cambios sin guardar en el inventario. ¿Segur@ que quieres salir?';
+    return 'Hay cambios sin guardar en el inventario. ¿Segur@ que quieres salir?';
+}
+
+function loadProductsForInventory() {
+    const inventoryList = document.getElementById('inventory-list');
+    const outputsList = document.getElementById('outputs-list');
+    inventoryList.innerHTML = '';
+    outputsList.innerHTML = '';
+
+    const select = document.getElementById('producto');
+    if (!select) {
+        const errorMsg = '<p>No se encontró la lista de productos.</p>';
+        inventoryList.innerHTML = errorMsg; outputsList.innerHTML = errorMsg;
+        return;
+    }
+    // recorrer las opciones del select y crear filas
+    Array.from(select.options).forEach((opt, idx) => {
+        if (!opt.text || opt.style.display === 'none') return; // omite ocultos
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.padding = '8px 6px';
+        row.style.borderBottom = '1px solid #f0f0f0';
+
+        const nameDiv = document.createElement('div');
+        nameDiv.style.flex = '1';
+        nameDiv.style.fontSize = '14px';
+        nameDiv.textContent = opt.text.replace(/\s*-\s*\$[0-9.,]+$/, ''); // quita el precio si existe
+
+        // --- Fila para INVENTARIO (ENTRADAS) ---
+        const qtyInput = document.createElement('input');
+        qtyInput.type = 'number';
+        qtyInput.min = '0';
+        qtyInput.value = '';
+        qtyInput.dataset.grossValue = ''; // Almacena la entrada bruta
+        qtyInput.id = `entrada-input-${idx}`; // ID para vincular
+        qtyInput.style.width = '90px';
+        qtyInput.style.marginLeft = '12px';
+        qtyInput.dataset.productName = opt.text;
+
+        // Contenedor para input y el indicador de salida
+        const inputContainer = document.createElement('div');
+        inputContainer.style.display = 'flex';
+        inputContainer.style.alignItems = 'center';
+        const outputIndicator = document.createElement('span');
+        outputIndicator.className = 'output-indicator';
+        outputIndicator.id = `output-indicator-${idx}`;
+
+        inputContainer.appendChild(qtyInput);
+        inputContainer.appendChild(outputIndicator);
+        row.appendChild(nameDiv);
+        row.appendChild(inputContainer);
+        inventoryList.appendChild(row);
+
+        // --- Fila para SALIDAS ---
+        const rowSalida = row.cloneNode(true); // Clonar la estructura
+        const nameDivSalida = rowSalida.querySelector('div');
+        const qtyInputSalida = document.createElement('input');
+        qtyInputSalida.type = 'number';
+        qtyInputSalida.min = '0';
+        qtyInputSalida.id = `salida-input-${idx}`; // ID para vincular
+        qtyInputSalida.style.width = '90px';
+        qtyInputSalida.style.marginLeft = '12px';
+        qtyInputSalida.dataset.productName = opt.text;
+
+        // Reemplazar el contenedor de input por el input de salida simple
+        rowSalida.replaceChild(qtyInputSalida, rowSalida.querySelector('div:last-child'));
+        outputsList.appendChild(rowSalida);
+
+        // --- Eventos y Lógica ---
+        qtyInput.addEventListener('input', (e) => {
+            // Guardar el valor bruto que el usuario escribe
+            e.target.dataset.grossValue = e.target.value;
+            autosaveInventoryDraft();
+            // Re-aplicar la resta con el nuevo valor de entrada
+            const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+            const entradaBruta = parseFloat(e.target.dataset.grossValue) || 0;
+            const resultado = entradaBruta - salidaValue;
+            e.target.value = resultado === 0 ? '' : resultado;
+        });
+        
+        qtyInputSalida.addEventListener('input', () => {
+            autosaveOutputsDraft();
+            const entradaBruta = parseFloat(qtyInput.dataset.grossValue) || 0;
+            const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+            const resultado = entradaBruta - salidaValue;
+            // Actualizar el valor visible de la entrada y el indicador
+            qtyInput.value = resultado === 0 ? '' : resultado;
+            outputIndicator.textContent = (salidaValue > 0) ? `-${salidaValue}` : '';
+        });
+    });
+
+    // Restaurar borradores después de crear todos los elementos
+    restoreInventoryDraft();
+    restoreOutputsDraft();
+}
+
+function addNewInventoryRow() {
+    const inventoryList = document.getElementById('inventory-list');
+    const outputsList = document.getElementById('outputs-list');
+    const newId = `custom-${Date.now()}`; // ID único para la nueva fila
+
+    // --- Crear Fila para ENTRADAS ---
+    const rowEntrada = document.createElement('div');
+    rowEntrada.className = 'inventory-row custom-row'; // Añadir clases para identificación y búsqueda
+    rowEntrada.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; border-bottom: 1px solid #f0f0f0;';
+    
+    const nameInputEntrada = document.createElement('input');
+    nameInputEntrada.type = 'text';
+    nameInputEntrada.placeholder = 'Nombre del nuevo producto';
+    nameInputEntrada.className = 'custom-product-name';
+    nameInputEntrada.style.cssText = 'flex: 1; font-size: 14px; border: 1px solid #ccc; border-radius: 5px; padding: 4px;';
+
+    const qtyInputEntrada = document.createElement('input');
+    qtyInputEntrada.type = 'number';
+    qtyInputEntrada.min = '0';
+    qtyInputEntrada.placeholder = 'Cant.';
+    qtyInputEntrada.dataset.grossValue = ''; // Almacena la entrada bruta
+    qtyInputEntrada.id = `entrada-input-${newId}`; // ID para vincular
+    qtyInputEntrada.style.cssText = 'width: 90px; margin-left: 12px;';
+
+    const inputContainer = document.createElement('div');
+    inputContainer.style.display = 'flex';
+    inputContainer.style.alignItems = 'center';
+    const outputIndicator = document.createElement('span');
+    outputIndicator.className = 'output-indicator';
+
+    inputContainer.appendChild(qtyInputEntrada);
+    inputContainer.appendChild(outputIndicator);
+    rowEntrada.appendChild(nameInputEntrada);
+    rowEntrada.appendChild(inputContainer);
+    inventoryList.prepend(rowEntrada); // Añadir al principio para visibilidad
+
+    // --- Crear Fila para SALIDAS ---
+    const rowSalida = rowEntrada.cloneNode(true);
+    const nameInputSalida = rowSalida.querySelector('.custom-product-name');
+    nameInputSalida.readOnly = true; // El nombre se sincroniza desde la pestaña de entradas
+    nameInputSalida.style.cssText += 'background-color: #f8f8f8; color: #102035;'; // Indicar que no es editable y forzar texto negro
+
+    const qtyInputSalida = document.createElement('input');
+    qtyInputSalida.type = 'number';
+    qtyInputSalida.min = '0';
+    qtyInputSalida.placeholder = 'Cant.';
+    qtyInputSalida.id = `salida-input-${newId}`; // ID para vincular
+    qtyInputSalida.style.cssText = 'width: 90px; margin-left: 12px;';
+
+    rowSalida.replaceChild(qtyInputSalida, rowSalida.querySelector('div:last-child'));
+    outputsList.prepend(rowSalida);
+
+    // --- Lógica y Sincronización ---
+    nameInputEntrada.addEventListener('input', () => {
+        nameInputSalida.value = nameInputEntrada.value; // Sincronizar nombres
+        autosaveInventoryDraft();
+    });
+    qtyInputEntrada.addEventListener('input', (e) => {
+        e.target.dataset.grossValue = e.target.value;
+        autosaveInventoryDraft();
+        const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+        const entradaBruta = parseFloat(e.target.dataset.grossValue) || 0;
+        const resultado = entradaBruta - salidaValue;
+        e.target.value = resultado === 0 ? '' : resultado;
+    });
+
+    qtyInputSalida.addEventListener('input', () => {
+        autosaveOutputsDraft();
+        const entradaBruta = parseFloat(qtyInputEntrada.dataset.grossValue) || 0;
+        const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+        const resultado = entradaBruta - salidaValue;
+        outputIndicator.textContent = (salidaValue > 0) ? `-${salidaValue}` : '';
+        qtyInputEntrada.value = resultado === 0 ? '' : resultado;
+    });
+
+    nameInputEntrada.focus(); // Poner el foco en el nuevo campo de nombre
+}
+
+
+function switchInventoryTab(tabName) {
+    // Ocultar todos los contenidos
+    document.querySelectorAll('.inventory-tab-content').forEach(content => content.classList.remove('active'));
+    // Quitar 'active' de todas las pestañas
+    document.querySelectorAll('.inventory-tab').forEach(tab => tab.classList.remove('active'));
+
+    // Activar la pestaña y contenido correctos
+    document.getElementById(`tab-content-${tabName}`).classList.add('active');
+    document.querySelector(`.inventory-tab[onclick="switchInventoryTab('${tabName}')"]`).classList.add('active');
+}
+
+function filterInventory() {
+    const searchTerm = document.getElementById('inventory-search').value.toLowerCase();
+    
+    // Filtrar ambas listas
+    document.querySelectorAll('#inventory-list > div, #outputs-list > div').forEach(row => {
+        let productName = '';
+        const nameDiv = row.querySelector('div:first-child');
+        const nameInput = row.querySelector('input[type="text"]');
+
+        if (nameInput) { // Para filas personalizadas
+            productName = nameInput.value.toLowerCase();
+        } else if (nameDiv) { // Para filas de productos existentes
+            productName = nameDiv.textContent.trim().toLowerCase();
+        }
+        row.style.display = productName.includes(searchTerm) ? 'flex' : 'none';
+    });
+}
+
+function downloadInventoryCSV() {
+    // función removida: la exportación CSV ya no está disponible desde la UI
+}
+
+async function saveInventoryPDF() {
+    // Cuando el usuario pide exportar PDF, pedimos un nombre y guardamos igual que "Guardar y Cerrar".
+    const data = collectInventoryData(); // Entradas
+    const salidas = collectOutputsData(); // Salidas
+    const entries = Object.entries(data);
+    if (entries.length === 0) return alert('No hay datos para exportar.');
+
+    // pedir nombre mediante el modal existente
+    showInventoryNameModal(async function(nombreArchivo) {
+        if (!nombreArchivo) nombreArchivo = 'inventario_' + new Date().toISOString().replace(/[:.]/g, '-');
+
+        // cargar jsPDF si falta
+        if (!window.jspdf) {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+            await new Promise(r => setTimeout(r, 100));
+        }
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 12;
+        const usableWidth = pageWidth - margin * 2;
+        const colQtyWidth = 25; // mm para columnas de cantidad
+        const colNameWidth = usableWidth - (colQtyWidth * 2) - 8; // Ancho para nombre
+        const lineHeight = 8;
+        let y = 18;
+
+        // ... (resto del código de PDF)
+
+        doc.setFontSize(14);
+        doc.text('Inventario de Productos', margin, y);
+        y += 8;
+        doc.setFontSize(11);
+        doc.text('Fecha: ' + (new Date()).toLocaleString(), margin, y);
+        y += 10;
+
+        // Dibujar encabezado de tabla con líneas
+        doc.setFontSize(11);
+        doc.setFillColor(240,240,240);
+        // header background
+        doc.rect(margin, y, usableWidth, lineHeight, 'F');
+        doc.setTextColor(20,20,20);
+        doc.text('Producto', margin + 3, y + 6);
+        doc.text('Entrada', margin + colNameWidth + 4, y + 6);
+        doc.text('Salida', margin + colNameWidth + colQtyWidth + 4, y + 6);
+        y += lineHeight;
+        doc.setDrawColor(200);
+        doc.setLineWidth(0.4);
+        doc.line(margin, y, margin + usableWidth, y);
+
+        // filas
+        entries.forEach(([name, entradaQty], idx) => {
+            const salidaQty = salidas[name] || '0';
+            // saltar si no hay registro (evitar filas completamente vacías)
+            if ((!entradaQty || entradaQty === '0') && (!salidaQty || salidaQty === '0')) return;
+
+            const nameLines = doc.splitTextToSize(name, colNameWidth - 6);
+            const rowHeight = Math.max(lineHeight, nameLines.length * lineHeight);
+            if (y + rowHeight > pageHeight - 18) {
+                doc.addPage();
+                y = 18;
+                // Repetir encabezado en nueva página
+                doc.rect(margin, y, usableWidth, lineHeight, 'F');
+                doc.text('Producto', margin + 3, y + 6);
+                doc.text('Entrada', margin + colNameWidth + 4, y + 6);
+                doc.text('Salida', margin + colNameWidth + colQtyWidth + 4, y + 6);
+                y += lineHeight;
+                doc.line(margin, y, margin + usableWidth, y);
+            }
+            // nombre producto
+            doc.text(nameLines, margin + 3, y + 6);
+            // quantity (right aligned in its box)
+            doc.text(String(entradaQty || '0'), margin + colNameWidth + 4, y + 6);
+            doc.text(String(salidaQty || '0'), margin + colNameWidth + colQtyWidth + 4, y + 6);
+            // draw horizontal separator line
+            y += rowHeight;
+            doc.setDrawColor(230);
+        });
+
+        // Guardar el PDF con el nombre dado
+        const safeName = nombreArchivo.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+        doc.save(safeName + '.pdf');
+
+        // Guardar el inventario en el registro con el mismo nombre
+        try {
+            const lista = getSavedInventories();
+            lista.push({ name: nombreArchivo, savedAt: new Date().toISOString(), data: data, salidas: salidas });
+            setSavedInventories(lista);
+            // compatibilidad
+            localStorage.setItem('inventario_final', JSON.stringify(data));
+            const meta = { savedAt: new Date().toISOString(), storage: 'localStorage', key: 'inventario_final' };
+            localStorage.setItem('inventario_final_meta', JSON.stringify(meta));
+            localStorage.removeItem('inventario_draft');
+            localStorage.removeItem('salidas_draft');
+        } catch (e) { console.error('No se pudo guardar inventario tras exportar PDF', e); }
+
+        // Después de guardar, abrir WhatsApp para enviar el documento
+        setTimeout(() => {
+            const numeroWhatsapp = "593983801298"; // Número de Ecuador (sin el 0 inicial)
+            const mensaje = `Hola, te comparto el inventario: "${nombreArchivo}".\n\nPara enviarlo, toca el ícono del clip (📎) en WhatsApp, selecciona 'Documento' y busca el archivo PDF que acabas de descargar.`;
+            const urlWhatsapp = `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(mensaje)}`;
+            
+            window.open(urlWhatsapp, '_blank').focus();
+        }, 500); // Pequeña pausa para asegurar que la descarga inicie
+
+        // Cerrar modal y volver a la vista principal
+        document.getElementById('inventory-modal').style.display = 'none';
+        window.removeEventListener('beforeunload', preventUnload);
+        updateSaveInfo();
+        updateInventoryButtonState();
+        // Scroll suave al principio/área principal
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+}
+
+// util: cargar script dinámicamente
+function loadScript(url) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+function collectInventoryData() {
+    const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
+    const out = {};
+    rows.forEach(r => {
+        let name = '';
+        const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+        const nameInput = r.querySelector('input[type="text"]');
+        if (nameInput) name = nameInput.value.trim();
+        else if (nameDiv) name = nameDiv.textContent.trim();
+        if (!name) return; // No guardar filas personalizadas sin nombre
+
+        const input = r.querySelector('input[type="number"]');
+        // Para las entradas, guardamos el valor bruto, no el calculado
+        let qty = input.dataset.grossValue; 
+        if (qty === undefined) { // Si no tiene dataset (es una fila de salida)
+            qty = input.value;
+        }
+        if (qty === null || qty === undefined) qty = ''; // Guardar vacío como vacío
+        out[name] = qty;
+    });
+    return out;
+}
+
+function collectOutputsData() {
+    const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
+    const out = {};
+    rows.forEach(r => {
+        let name = '';
+        const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+        const nameInput = r.querySelector('input[type="text"]');
+        if (nameInput) name = nameInput.value.trim();
+        else if (nameDiv) name = nameDiv.textContent.trim();
+        if (!name) return;
+
+        let qty = r.querySelector('input').value;
+        if (qty === null || qty === undefined) qty = ''; // Guardar vacío como vacío
+        out[name] = qty;
+    });
+    return out;
+}
+function autosaveInventoryDraft() {
+    // guarda en localStorage un borrador con las cantidades actuales
+    const draft = collectInventoryData();
+    localStorage.setItem('inventario_draft', JSON.stringify(draft));
+}
+
+function restoreInventoryDraft() {
+    const draftRaw = localStorage.getItem('inventario_draft');
+    if (!draftRaw) return;
+    try {
+        const draft = JSON.parse(draftRaw);
+        // asignar a inputs ya creados
+        const rows = Array.from(document.querySelectorAll('#inventory-list > div'));
+        rows.forEach((r, idx) => {
+            let name = '';
+            const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+            const nameInput = r.querySelector('input[type="text"]');
+            if (nameInput) name = nameInput.value.trim();
+            else if (nameDiv) name = nameDiv.textContent.trim();
+            if (!name) return;
+
+            const savedValue = draft[name];
+            if (savedValue !== undefined) {
+                const input = r.querySelector('input[type="number"]');
+                input.value = savedValue === '0' ? '' : savedValue;
+                input.dataset.grossValue = savedValue === '0' ? '' : savedValue; // Restaurar también el valor bruto
+            }
+        });
+    } catch (e) { /* ignore */ }
+}
+
+function autosaveOutputsDraft() {
+    const draft = collectOutputsData();
+    localStorage.setItem('salidas_draft', JSON.stringify(draft));
+}
+
+function restoreOutputsDraft() {
+    const draftRaw = localStorage.getItem('salidas_draft');
+    if (!draftRaw) return;
+    try {
+        const draft = JSON.parse(draftRaw);
+        const rows = Array.from(document.querySelectorAll('#outputs-list > div'));
+        rows.forEach(r => {
+            let name = '';
+            const nameDiv = r.querySelector('div:not([style*="display: flex"])');
+            const nameInput = r.querySelector('input[type="text"]');
+            if (nameInput) name = nameInput.value.trim();
+            else if (nameDiv) name = nameDiv.textContent.trim();
+            if (!name) return;
+
+            const salidaInput = r.querySelector('input[type="number"]');
+            const idx = salidaInput.id.split('-').pop();
+            const entradaInput = document.getElementById(`entrada-input-${idx}`);
+            if (!entradaInput) return;
+
+            const outputIndicator = document.getElementById(`output-indicator-${idx}`);
+            const savedValue = draft[name];
+            if (savedValue !== undefined) {
+                const input = r.querySelector('input');
+                input.value = savedValue === '0' ? '' : savedValue;
+                // Actualizar indicador visual en la otra pestaña
+                if (input.value && input.value !== '0' && outputIndicator) {
+                    const salidaValue = parseFloat(input.value) || 0;
+                    outputIndicator.textContent = `-${salidaValue}`;
+                    // Realizar la resta visual al restaurar, usando el valor bruto
+                    const entradaBruta = parseFloat(entradaInput.dataset.grossValue) || 0;
+                    const resultado = entradaBruta - salidaValue;
+                    entradaInput.value = resultado === 0 ? '' : resultado;
+                }
+            }
+        });
+    } catch (e) { /* ignore */ }
+}
+
+function pauseInventory() {
+    // simplemente cierra el modal pero mantiene el borrador en localStorage
+    document.getElementById('inventory-modal').style.display = 'none';
+    // quitar prevención de unload
+    window.removeEventListener('beforeunload', preventUnload);
+    updateInventoryButtonState();
+    alert('Inventario pausado. Puedes continuar en otro momento haciendo clic en Inventario.');
+}
+
+function clearInventoryDraft() {
+    if (!confirm('¿Eliminar el borrador actual del inventario? Esta acción no se puede deshacer.')) return;
+    localStorage.removeItem('inventario_draft');
+    localStorage.removeItem('salidas_draft');
+    localStorage.removeItem('inventario_final');
+    // limpiar inputs visibles
+    document.querySelectorAll('#inventory-list input, #outputs-list input').forEach(inp => inp.value = '');
+    // limpiar indicadores visuales
+    document.querySelectorAll('.output-indicator').forEach(ind => ind.textContent = '');
+    updateInventoryButtonState();
+    alert('Borrador eliminado.');
+}
+
+function updateInventoryButtonState() {
+    const btn = document.getElementById('open-inventory-btn');
+    const draft = localStorage.getItem('inventario_draft');
+    const salidas = localStorage.getItem('salidas_draft');
+    if (!btn) return;
+    if (draft || salidas) {
+        btn.style.background = 'linear-gradient(180deg,#ffd86b 0%,#f6c84c 100%)';
+        btn.title = 'Inventario (borrador disponible)';
+    } else {
+        btn.style.background = '';
+        btn.className = 'proforma-action-btn btn-azul';
+        btn.title = 'Inventario';
+    }
+}
+
+// actualizar estado del botón al cargar la página
+window.addEventListener('DOMContentLoaded', updateInventoryButtonState);
+
+// Exponer funciones al scope global para los `onclick` del HTML
+window.openInventory = openInventory;
+window.openSavedInventory = openSavedInventory;
+window.verificarPassword = verificarPassword;
+
+function verificarPassword() {
+    const password = document.getElementById("password").value;
+    const passwordCorrecta = "5555";  // Contraseña correcta
+    const boton = document.getElementById("accederBtn");
+    const mensaje = document.getElementById("mensaje");
+
+    // Restablece el estilo del botón
+    boton.style.backgroundColor = "";
+    boton.style.transform = "";
+    mensaje.style.display = "none";
+
+    if (password === passwordCorrecta) {
+        // Efecto de botón presionado (cambio de color y hundimiento)
+        boton.style.backgroundColor = "#28a745"; // Verde
+        boton.style.transform = "translateY(2px)";
+        boton.innerHTML = "Accediendo...";
+
+        // Redirige a la hoja de cálculo en una nueva pestaña después de un pequeño retraso
+        setTimeout(() => {
+            window.open("https://docs.google.com/spreadsheets/d/1lm9rsOQw57roxDV4RKGORSEzWRmGa6je5AR_G8R7vHs/edit?usp=drivesdk", "_blank");
+            boton.innerHTML = "Acceder";  // Restablece el texto del botón
+            boton.style.backgroundColor = "";
+            boton.style.transform = "";
+        }, 500);
+    } else {
+        // Si la contraseña es incorrecta, muestra el mensaje de error y un efecto de "hundimiento"
+        boton.style.backgroundColor = "#dc3545"; // Rojo
+        boton.style.transform = "translateY(2px)";
+        mensaje.style.display = "block";  // Muestra el mensaje de error
+
+        // Restablece el efecto de hundimiento después de un breve período
+        setTimeout(() => {
+            boton.style.transform = "";
+            boton.style.backgroundColor = "";
+        }, 400);
+    }
+}
+
+// Nota: para guardar directamente en Google Sheets necesitarás un endpoint (Google Apps Script)
+</script>
+<script>
+// Modal animado para ingresar el nombre del archivo y guardar
+function mostrarModalNombreArchivo() {
+    if (document.getElementById('modal-nombre-archivo')) return;
+    const modal = document.createElement('div');
+    modal.id = 'modal-nombre-archivo';
+    modal.innerHTML = `
+        <div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.28);z-index:10000;display:flex;align-items:center;justify-content:center;">
+            <div style="display:flex;flex-direction:column;gap:12px;align-items:center;background:rgba(255,255,255,0.98);padding:24px 28px 18px 28px;border-radius:16px;box-shadow:0 2px 18px #14b8ff44,0 0 0 1px #8b5cf633;min-width:260px;">
+                <div style='font-size:15px;font-weight:600;color:#222;margin-bottom:4px;text-shadow:0 2px 8px #fff;'>Nombre del archivo</div>
+                <input id="input-nombre-archivo" type="text" placeholder="Ej: proforma_cliente" style="font-size:15px;padding:7px 12px;border-radius:8px;border:1px solid #14b8ff77;width:200px;outline:none;box-shadow:0 1px 0 #14b8ff22 inset;" autofocus />
+                <button id="btn-visto-guardar" style="margin-top:8px;padding:6px 18px;background:#06d6a0;color:#fff;border:none;border-radius:10px;font-size:18px;cursor:pointer;box-shadow:0 2px 10px #06d6a055;display:flex;align-items:center;gap:6px;transition:background 0.18s;">
+                    <span style="font-size:20px;">✔️</span> Guardar
+                </button>
+                <button id="btn-cancelar-nombre-archivo" style="margin-top:4px;padding:4px 12px;background:#ff3864;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">Cancelar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    // Guardar al presionar el botón de visto
+    document.getElementById('btn-visto-guardar').onclick = function() {
+        guardarPaginaPersonalizadaDesdeModal();
+    };
+    // Guardar al presionar Enter
+    document.getElementById('input-nombre-archivo').onkeydown = function(e) {
+        if (e.key === 'Enter') {
+            guardarPaginaPersonalizadaDesdeModal();
+        }
+    };
+    // Cancelar
+    document.getElementById('btn-cancelar-nombre-archivo').onclick = function() {
+        modal.remove();
+    };
+}
+
+function guardarPaginaPersonalizadaDesdeModal() {
+    var modal = document.getElementById('modal-nombre-archivo');
+    var input = document.getElementById('input-nombre-archivo');
+    var nombrePagina = (input.value || '').trim() || 'proforma_guardada';
+    var nombreCliente = (document.getElementById('nombreCliente').value || '').trim() || "CONSUMIDOR FINAL";
+    var nombreVendedor = document.getElementById('nombreVendedorDisplay').innerText || "";
+
+    // Clona el documento y elimina el modal ANTES de guardar
+    let docClone = document.documentElement.cloneNode(true);
+
+    // Elimina el modal de nombre de archivo si existe en el clon
+    let modalClone = docClone.querySelector('#modal-nombre-archivo');
+    if (modalClone) modalClone.remove();
+
+    // Elimina cualquier overlay de fondo del modal si existe en el clon
+    let overlays = docClone.querySelectorAll('[style*="background:rgba(0,0,0"]');
+    overlays.forEach(function(overlay) {
+        if (overlay.id !== "modal-nombre-inventario" && overlay.id !== "modal-lista-inventarios") {
+            // Solo elimina overlays relacionados al modal de guardar proforma
+            overlay.remove();
+        }
+    });
+
+    // Actualiza los campos dinámicos en el clon
+    let htmlClonado = docClone.outerHTML;
+    htmlClonado = htmlClonado.replace(
+        /<input type="text" id="nombreCliente"[^>]*>/,
+        `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${nombreCliente}">`
+    );
+    htmlClonado = htmlClonado.replace(/<span id="nombreVendedorDisplay"[^>]*>.*<\/span>/,
+        `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
+    );
+
+    // Guardar en localStorage la proforma (nombre, fecha, html)
+    let proformas = [];
+    try {
+        proformas = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
+    } catch(e) { proformas = []; }
+    if (!Array.isArray(proformas)) proformas = [];
+    proformas.push({ name: nombrePagina, savedAt: new Date().toISOString(), html: htmlClonado });
+    localStorage.setItem('proformas_guardadas', JSON.stringify(proformas));
+
+    const blob = new Blob([htmlClonado], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nombrePagina + ".html";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    if (modal) modal.remove();
+}
+
+window.mostrarModalNombreArchivo = mostrarModalNombreArchivo;
+window.guardarPaginaPersonalizadaDesdeModal = guardarPaginaPersonalizadaDesdeModal;
+// Mostrar/ocultar la calculadora al hacer clic en el botón
+document.addEventListener('DOMContentLoaded', function() {
+    var calcBtn = document.getElementById('calculator-btn');
+    if (calcBtn) {
+        calcBtn.addEventListener('click', function() {
+            var calculator = document.getElementById('calculator');
+            if (calculator.style.display === 'none' || calculator.style.display === '') {
+                calculator.style.display = 'block';
+            } else {
+                calculator.style.display = 'none';
+            }
+        });
+    }
+});
+  // otras funciones...
+
+
+    // MODAL animado con botones traslúcidos para seleccionar vendedor
+    function mostrarModalVendedor() {
+        let modal = document.getElementById('modal-vendedor');
+        if (modal) return;
+        modal = document.createElement('div');
+        modal.id = 'modal-vendedor';
+        modal.innerHTML = `
+            <div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.28);z-index:10000;display:flex;align-items:center;justify-content:center;">
+                <div style="display:flex;flex-direction:column;gap:12px;align-items:center;">
+                    <div style='font-size:15px;font-weight:600;color:#222;margin-bottom:4px;text-shadow:0 2px 8px #fff;'>Selecciona el vendedor</div>
+                    <div id="vendedor-btn-list" style="display:flex;flex-direction:column;gap:8px;">
+                    </div>
+                    <button id="modalVendedorCancelar" style="margin-top:6px;padding:5px 14px;background:#ff7043;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">Cancelar</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        // Lista de vendedores
+        const vendedores = ["Fernando B.", "Ricardo B.", "Joselin S.", "Pedro H.", "Jonathan", "Guillermo"];
+        const list = modal.querySelector('#vendedor-btn-list');
+        vendedores.forEach((nombre, i) => {
+            const btn = document.createElement('button');
+            btn.textContent = nombre;
+            btn.style.cssText = `
+                padding: 7px 18px;
+                font-size: 14px;
+                font-weight: 500;
+                color: #111;
+                background: rgba(20,184,255,0.72);
+                border: none;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(20,184,255,0.10);
+                cursor: pointer;
+                outline: none;
+                transition: transform 0.18s cubic-bezier(.4,2,.6,1), box-shadow 0.18s;
+                opacity: 0;
+                transform: scale(0.85) translateY(18px);
+                backdrop-filter: blur(2px);
+            `;
+            setTimeout(() => {
+                btn.style.opacity = '1';
+                btn.style.transform = 'scale(1) translateY(0)';
+            }, 60 + i*60);
+            btn.onmouseover = () => btn.style.background = 'rgba(20,184,255,0.92)';
+            btn.onmouseout = () => btn.style.background = 'rgba(20,184,255,0.72)';
+            btn.onclick = () => {
+                modal.remove();
+                guardarComoImagenConVendedor(nombre);
+            };
+            list.appendChild(btn);
+        });
+        document.getElementById('modalVendedorCancelar').onclick = function() {
+            modal.remove();
+        };
+    }
+
+    window.guardarComoImagen = function() {
+        mostrarModalVendedor();
+    }
+
+    function guardarComoImagenConVendedor(vendedor) {
+        // Obtener el elemento donde se mostrará el nombre del vendedor
+        const vendedorDisplay = document.getElementById('nombreVendedorDisplay');
+        // Escribir el nombre del vendedor en la proforma
+        vendedorDisplay.innerText = vendedor;
+
+        // Si el nombre del cliente está vacío, poner "CONSUMIDOR FINAL" para la imagen
+        const clienteInput = document.getElementById('nombreCliente');
+        const originalClienteValue = clienteInput.value;
+        if (!clienteInput.value.trim()) {
+            clienteInput.value = "CONSUMIDOR FINAL";
+        }
+
+        // Elementos a ocultar y el contenedor de la proforma
+        const ocultar = document.querySelectorAll('.no-imagen');
+        const proforma = document.getElementById("proforma");
+        
+        // Guardar estilos originales para restaurarlos después
+        const originalProformaStyle = proforma.style.cssText;
+
+        // Ocultar elementos que no deben salir en la imagen
+        ocultar.forEach(el => el.style.display = 'none');
+        
+        // Forzar un ancho de "celular" y el tema claro para la captura
+        proforma.style.width = '414px';
+        proforma.style.maxWidth = '414px';
+        proforma.classList.add('force-light-theme-for-capture');
+
+        // Esperar un pequeño tiempo para que el DOM se actualice y luego capturar
+        setTimeout(() => {
+            html2canvas(proforma, {
+                scale: 2.5, // Aumentar la escala para mejor calidad en la imagen final
+                useCORS: true,
+                backgroundColor: "#ffffff"
+            }).then((canvas) => {
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+
+                // Detectar si es un dispositivo iOS (iPhone, iPad)
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+                if (isIOS) {
+                    // En iOS, abrir la imagen en una nueva pestaña para que el usuario la guarde manualmente
+                    const newTab = window.open();
+                    if (newTab) {
+                        newTab.document.write('<html><head><title>Proforma</title></head><body style="margin:0;"><img src="' + dataUrl + '" style="width:100%; display:block;" alt="Proforma"></body></html>');
+                    } else {
+                        alert('No se pudo abrir una nueva pestaña. Por favor, deshabilita el bloqueador de pop-ups.');
+                    }
+                } else {
+                    // Para otros dispositivos, forzar la descarga directa
+                    const enlace = document.createElement("a");
+                    enlace.href = dataUrl;
+                    enlace.download = "proforma.jpg";
+                    enlace.click();
+                }
+
+                // Limpiar y restaurar la vista original
+                vendedorDisplay.innerText = "";
+                clienteInput.value = originalClienteValue; // Restaurar el valor original del cliente
+                ocultar.forEach(el => el.style.display = ''); // Usar '' para restaurar el display por defecto
+                proforma.style.cssText = originalProformaStyle; // Restaurar estilos originales
+                proforma.classList.remove('force-light-theme-for-capture'); // Quitar la clase temporal
+            }).catch(err => {
+                console.error('Error html2canvas:', err);
+                alert('No fue posible generar la imagen en este dispositivo.');
+            });
+        }, 80);
+    }
+</script>
+
+
+
+
+
+    <script>
+    // ID de la hoja de cálculo de Google Sheets
+    const SHEET_ID = "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
+
+    // Variable global para almacenar todas las opciones de productos originales
+    let todosLosProductosOptions = [];
+
+    // Función para cargar productos desde la caché local (localStorage)
+    function cargarProductosDesdeCache() {
+        const productosCacheados = localStorage.getItem('productos_cache');
+        if (productosCacheados) {
+            console.log("Cargando productos desde el cerebro (caché)...");
+            const productos = JSON.parse(productosCacheados);
+            const selectProducto = document.getElementById("producto");
+            const fragment = document.createDocumentFragment(); // Optimización: usar fragment
+            selectProducto.innerHTML = ''; // Limpiar select
+            todosLosProductosOptions = []; // Limpiar array global
+
+            productos.forEach(productoTexto => {
+                const option = document.createElement("option");
+                option.text = productoTexto;
+                todosLosProductosOptions.push(option);
+                fragment.appendChild(option.cloneNode(true)); // Añadir al fragment
+            });
+            
+            selectProducto.appendChild(fragment); // Una sola inserción al DOM
+            return true; // Indica que se cargó desde caché
+        }
+        return false; // No hay nada en caché
+    }
+
+    // Función para cargar productos desde Google Sheets
+    async function cargarProductosDesdeGoogleSheets() {
+        const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('La respuesta de la red no fue exitosa.');
+            }
+            const data = await response.text();
+            const productos = data.split("\n").map(line => line.split(","));
+            const productosParaCache = []; // Array para guardar en el "cerebro"
+            
+            // Verificar que los productos se han cargado
+            if (productos.length > 0) {
+                const selectProducto = document.getElementById("producto");
+                const fragment = document.createDocumentFragment(); // Optimización: usar fragment
+                selectProducto.innerHTML = ''; // Limpiar el select
+                todosLosProductosOptions = []; // Limpiar array global
+
+                productos.forEach(function(producto) {
+                    const nombreProducto = producto[0];
+                    const precioProducto = producto[1] ? parseFloat(producto[1]) : null;
+                    const option = document.createElement("option");
+                    let textoOpcion;
+                    
+                    if (!isNaN(precioProducto)) {
+                        textoOpcion = `${nombreProducto} - $${precioProducto.toFixed(2)}`;
+                    } else {
+                        textoOpcion = `${nombreProducto}`;
+                    }
+                    option.text = textoOpcion;
+                    productosParaCache.push(textoOpcion); // Guardar texto para la caché
+                    todosLosProductosOptions.push(option);
+                    fragment.appendChild(option.cloneNode(true)); // Añadir al fragment en lugar del select
+                });
+                
+                selectProducto.appendChild(fragment); // Una sola inserción al DOM
+                
+                // Guardar la lista fresca de productos en el "cerebro" (localStorage)
+                localStorage.setItem('productos_cache', JSON.stringify(productosParaCache));
+                console.log("Cerebro actualizado con nuevos productos desde Google Sheets.");
+            }
+        } catch (error) {
+            console.error("Error al cargar desde Google Sheets. Se usarán los datos del cerebro si existen.", error);
+            // No es necesario hacer nada más, porque ya se intentó cargar desde la caché.
+        }
+    }
+
+    // Inicialización de productos
+    function inicializarProductos() {
+        // 1. Intenta actualizar desde internet. Si falla, usa la caché.
+        cargarProductosDesdeGoogleSheets().catch(() => {
+            cargarProductosDesdeCache();
+        });
+    }
+
+    function limpiarBuscador() {
+        const buscadorInput = document.getElementById("buscador");
+        buscadorInput.value = "";
+        buscarProducto(); // Actualiza la lista de productos
+        buscadorInput.focus(); // Pone el foco para escribir de nuevo
+    }
+
+
+
+
+
+
+    function buscarProducto() {
+        const busqueda = document.getElementById("buscador").value.toLowerCase();
+        const select = document.getElementById("producto");
+        const palabras = busqueda.split(" ").filter(p => p.trim() !== "");
+
+        // Limpiar opciones actuales
+        select.innerHTML = '';
+
+        // Filtrar desde la lista maestra y añadir las opciones que coinciden
+        // La nueva lógica permite que las palabras de búsqueda aparezcan en cualquier orden
+        const productosFiltrados = todosLosProductosOptions.filter(option => {
+            const nombreCompleto = option.textContent.toLowerCase();
+            let nombreProducto = nombreCompleto.split(' - $')[0]; // Obtener solo la parte del nombre, antes del precio
+            
+            // Lógica mejorada: Separa números de letras (ej: "100mm" -> "100 mm") para que la búsqueda por palabra completa funcione.
+            nombreProducto = nombreProducto.replace(/(\d+)([a-zA-Z]+)/g, '$1 $2').replace(/([a-zA-Z]+)(\d+)/g, '$1 $2');
+
+            // Lógica mejorada: Busca palabras que COMIENCEN con el término de búsqueda para resultados instantáneos y precisos.
+            return palabras.every(palabra => new RegExp('\\b' + palabra).test(nombreProducto));
+        });
+
+        if (productosFiltrados.length > 0) {
+            productosFiltrados.forEach(option => {
+                select.add(option.cloneNode(true));
+            });
+            // Seleccionar la primera coincidencia y actualizar campos
+            select.selectedIndex = 0;
+            if (typeof copiarNombreYPrecio === 'function') {
+                copiarNombreYPrecio();
+            }
+        } else {
+            // Si no hay coincidencias, limpiar los campos
+            select.selectedIndex = -1;
+            document.getElementById("nombreProducto").value = "";
+            document.getElementById("precioProducto").value = "";
+        }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+
+    var productos = {};
+
+    function copiarNombreYPrecio() {
+        var seleccion = document.getElementById("producto");
+        if (seleccion.selectedIndex < 0) return; // No hacer nada si no hay nada seleccionado
+
+        var nombrePrecio = seleccion.options[seleccion.selectedIndex].text.split(" - $");
+        var nombreProducto = document.getElementById("nombreProducto");
+        var precioProducto = document.getElementById("precioProducto");
+
+        nombreProducto.value = nombrePrecio[0] || "";
+
+        if (nombrePrecio.length > 1 && !isNaN(parseFloat(nombrePrecio[1]))) {
+            precioProducto.value = parseFloat(nombrePrecio[1]).toFixed(2);
+        } else {
+            precioProducto.value = ""; // Limpiar si no hay precio
+        }
+    }
+    
+    
+    
+    
+    
+
+    function agregarProducto() {
+        var nombreProducto = document.getElementById("nombreProducto").value;
+        var precio = parseFloat(document.getElementById("precioProducto").value);
+        var cantidad = parseInt(document.getElementById("cantidad").value);
+
+        if (nombreProducto && !isNaN(precio) && !isNaN(cantidad)) {
+            var subtotal = precio * cantidad;
+            productos[nombreProducto] = { precio: precio, cantidad: cantidad };
+            var table = document.querySelector("table");
+            var newRow = table.insertRow(table.rows.length);
+            var cell1 = newRow.insertCell(0);
+            var cell2 = newRow.insertCell(1);
+            var cell3 = newRow.insertCell(2);
+            var cell4 = newRow.insertCell(3);
+
+            // Configurar celdas con contenido
+            cell1.innerHTML = nombreProducto;
+            cell1.className = 'editable-cell';
+            cell1.title = nombreProducto; // Tooltip para ver texto completo
+            cell1.dataset.originalName = nombreProducto;
+            cell1.dataset.price = precio;
+            cell1.dataset.qty = cantidad;
+            
+            cell2.innerHTML = cantidad;
+            cell2.className = 'editable-cell';
+            cell2.dataset.originalName = nombreProducto;
+            
+            cell3.innerHTML = "$" + precio.toFixed(2);
+            cell3.className = 'editable-cell';
+            cell3.dataset.originalName = nombreProducto;
+            
+            cell4.innerHTML = "$" + subtotal.toFixed(2);
+
+            // Hacer celdas editables al hacer clic
+            cell1.onclick = function() { editarCelda(this, 'nombre', nombreProducto); };
+            cell2.onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
+            cell3.onclick = function() { editarCelda(this, 'precio', nombreProducto); };
+            
+            // Doble clic para eliminar fila (en cualquier celda)
+            newRow.ondblclick = function() {
+                if (confirm('¿Eliminar este producto?')) {
+                    delete productos[nombreProducto];
+                    table.deleteRow(newRow.rowIndex);
+                    calcularTotal();
+                }
+            };
+
+            calcularTotal();
+
+            // Guardar la selección actual del producto antes de limpiar
+            const selectProducto = document.getElementById("producto");
+            const valorSeleccionado = selectProducto.value;
+
+            // Limpiar campos después de agregar
+            document.getElementById("cantidad").value = "1";
+        } else {
+            alert("Por favor, ingrese un nombre y un precio válido.");
+        }
+    }
+
+    // Nueva función para editar celda al hacer clic
+    function editarCelda(celda, tipo, nombreOriginal) {
+        // Si ya está editando, no hacer nada
+        if (celda.querySelector('input')) return;
+        
+        const valorActual = celda.textContent.replace('$', '').trim();
+        const row = celda.parentNode;
+        
+        // Crear input
+        const input = document.createElement('input');
+        input.className = 'editing-input';
+        
+        if (tipo === 'nombre') {
+            input.type = 'text';
+            input.value = valorActual;
+            input.style.width = '150%';
+        } else if (tipo === 'cantidad') {
+            input.type = 'number';
+            input.min = '1';
+            input.value = parseInt(valorActual) || 1;
+            input.style.width = '200%';
+        } else if (tipo === 'precio') {
+            input.type = 'number';
+            input.step = '0.01';
+            input.value = parseFloat(valorActual) || 0;
+            input.style.width = '180%';
+        }
+        
+        // Reemplazar contenido con input
+        celda.innerHTML = '';
+        celda.appendChild(input);
+        input.focus();
+        input.select();
+        
+        // Guardar al presionar Enter o perder foco
+        const guardar = function() {
+            const nuevoValor = input.value.trim();
+            if (!nuevoValor) {
+                celda.textContent = valorActual;
+                return;
+            }
+            
+            // Obtener datos de la fila
+            const celdaNombre = row.cells[0];
+            const celdaCant = row.cells[1];
+            const celdaPrecio = row.cells[2];
+            const celdaSubtotal = row.cells[3];
+            
+            let nombre = celdaNombre.textContent || celdaNombre.querySelector('input')?.value;
+            let cantidad = parseInt(celdaCant.textContent || celdaCant.querySelector('input')?.value);
+            let precio = parseFloat((celdaPrecio.textContent || celdaPrecio.querySelector('input')?.value).replace('$', ''));
+            
+            // Actualizar según el tipo
+            if (tipo === 'nombre') {
+                delete productos[nombreOriginal];
+                nombre = nuevoValor;
+                celda.textContent = nuevoValor;
+                celda.title = nuevoValor;
+            } else if (tipo === 'cantidad') {
+                cantidad = parseInt(nuevoValor);
+                celda.textContent = cantidad;
+            } else if (tipo === 'precio') {
+                precio = parseFloat(nuevoValor);
+                celda.textContent = '$' + precio.toFixed(2);
+            }
+            
+            // Actualizar productos y subtotal
+            productos[nombre] = { precio: precio, cantidad: cantidad };
+            celdaSubtotal.textContent = '$' + (precio * cantidad).toFixed(2);
+            
+            // Actualizar eventos onclick con nuevo nombre
+            celdaNombre.onclick = function() { editarCelda(this, 'nombre', nombre); };
+            celdaCant.onclick = function() { editarCelda(this, 'cantidad', nombre); };
+            celdaPrecio.onclick = function() { editarCelda(this, 'precio', nombre); };
+            
+            calcularTotal();
+        };
+        
+        input.onblur = guardar;
+        input.onkeydown = function(e) {
+            if (e.key === 'Enter') {
+                guardar();
+            } else if (e.key === 'Escape') {
+                celda.textContent = tipo === 'precio' ? '$' + valorActual : valorActual;
+            }
+        };
+    }
+
+    function editarProducto(row, nombreOriginal, precioOriginal, cantidadOriginal) {        
+        // Guardar el contenido original de la fila para poder cancelar la edición
+        row.dataset.originalHtml = row.innerHTML;
+
+        // Agregar clase de edición a la fila completa
+        row.classList.add('editing-row');
+
+        // Agregar clase a las celdas que contendrán inputs
+        row.cells[0].classList.add('editing-cell');
+        row.cells[1].classList.add('editing-cell');
+        row.cells[2].classList.add('editing-cell');
+
+        // Insertar los inputs con tamaños completos y visibles
+        row.cells[0].innerHTML = `<input type="text" value="${nombreOriginal}" class="editing-input">`;
+        row.cells[1].innerHTML = `<input type="number" value="${cantidadOriginal}" min="1" class="editing-input">`;
+        row.cells[2].innerHTML = `<input type="number" value="${precioOriginal.toFixed(2)}" step="0.01" class="editing-input">`;
+        
+        // Poner el foco en el primer input para una edición rápida
+        const firstInput = row.cells[0].querySelector('input');
+        if (firstInput) {
+            firstInput.focus();
+            firstInput.select();
+        }
+
+        // Limpiar las celdas de subtotal y botones
+        row.cells[3].innerHTML = ''; // Celda de subtotal
+        row.cells[4].innerHTML = ''; // Celda de editar
+
+        // Añadir botones de "Aceptar" (visto) y "Cancelar" en la última celda
+        // Estos no necesitan ser flotantes, ya que la tabla no se deforma.
+        row.cells[5].innerHTML = `
+            <button onclick="actualizarProducto(this, '${nombreOriginal}')" style="background:transparent; border:none; color:green; cursor:pointer; font-size:14px; padding: 2px 4px;"><i class="fas fa-check"></i></button>
+            <button onclick="cancelarEdicion(this, '${nombreOriginal}')" style="background:transparent; border:none; color:red; cursor:pointer; font-size:14px; padding: 2px 4px;"><i class="fas fa-times"></i></button>
+        `;
+    }
+
+    function actualizarProducto(btn, nombreOriginal) {
+        var row = btn.parentNode.parentNode;
+        var nombreProducto = row.cells[0].querySelector('input').value;
+        var cantidad = parseInt(row.cells[1].querySelector('input').value);
+        var precio = parseFloat(row.cells[2].querySelector('input').value);
+
+        if (nombreProducto && !isNaN(cantidad) && !isNaN(precio)) {
+            // Actualizar el objeto de productos
+            delete productos[nombreOriginal];
+            productos[nombreProducto] = { precio: precio, cantidad: cantidad };
+
+            var subtotal = precio * cantidad;
+
+            row.cells[0].innerHTML = nombreProducto;
+            row.cells[1].innerHTML = cantidad;
+            row.cells[2].innerHTML = "$" + precio.toFixed(2);
+            row.cells[3].innerHTML = "$" + subtotal.toFixed(2);
+
+            // Remover las clases de edición
+            row.classList.remove('editing-row');
+            row.cells[0].classList.remove('editing-cell');
+            row.cells[1].classList.remove('editing-cell');
+            row.cells[2].classList.remove('editing-cell');
+
+            // Restaurar los botones de Editar y Eliminar
+            row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreProducto}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
+            row.cells[5].innerHTML = `<button onclick="eliminarFila(this, '${nombreProducto}')" class="close-btn" style="padding: 2px 4px;"><i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i></button>`;
+
+            calcularTotal();
+        } else {
+            alert("Por favor, ingrese valores válidos para nombre, cantidad y precio.");
+        }
+    }
+
+    function cancelarEdicion(btn, nombreOriginal) {
+        var row = btn.parentNode.parentNode;
+        const producto = productos[nombreOriginal];
+        if (producto) {
+            const { precio, cantidad } = producto;
+            const subtotal = precio * cantidad;
+
+            row.cells[0].innerHTML = nombreOriginal;
+            row.cells[1].innerHTML = cantidad;
+            row.cells[2].innerHTML = "$" + precio.toFixed(2);
+            row.cells[3].innerHTML = "$" + subtotal.toFixed(2);
+
+            // Remover las clases de edición
+            row.classList.remove('editing-row');
+            row.cells[0].classList.remove('editing-cell');
+            row.cells[1].classList.remove('editing-cell');
+            row.cells[2].classList.remove('editing-cell');
+
+            // Restaurar botones con sus eventos
+            row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreOriginal}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
+            row.cells[5].innerHTML = `<button onclick="eliminarFila(this, '${nombreOriginal}')" class="close-btn" style="padding: 2px 4px;"><i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i></button>`;
+        }
+    }
+    
+    
+    
+    
+    
+    
+    // Función para eliminar una fila, necesaria para el botón restaurado después de editar
+    function eliminarFila(btn, nombreProducto) {
+        var row = btn.parentNode.parentNode;
+        delete productos[nombreProducto];
+        row.parentNode.removeChild(row);
+        calcularTotal();
+    }
+    
+    
+    function calcularTotal() { 
+    let subtotal = 0;
+    const table = document.querySelector("table");
+
+    // Sumamos subtotales (sin IVA)
+    for (let i = 1; i < table.rows.length; i++) {
+        if (table.rows[i].cells.length >= 4) {
+            subtotal += parseFloat(table.rows[i].cells[3].innerHTML.replace("$", ""));
+        }
+    }
+
+    // Cálculos
+    const iva = subtotal * 0.0;
+    const totalConIVA = subtotal + iva;
+
+    // Mostrar resultados
+    
+    document.getElementById("total").innerHTML = "Total: $" + totalConIVA.toFixed(2);
+}   
+
+    function cargarPagina() {
+    // Modal con lista de proformas guardadas en localStorage
+    if (document.getElementById('modal-lista-proformas')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-lista-proformas';
+    overlay.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.36);z-index:11000;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:18px 20px 14px 20px;border-radius:14px;min-width:260px;max-width:96vw;box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateY(-24px) scale(0.96);animation:popIn 320ms cubic-bezier(.2,1.2,.3,1) forwards;';
+    box.innerHTML = `<div style=\"font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;\">Proformas guardadas</div>`;
+    // Soporte experimental File System Access API
+    // Eliminado el botón experimental de seleccionar carpeta
+    // Listado localStorage (siempre disponible)
+    let proformas = [];
+    try {
+        proformas = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
+    } catch(e) { proformas = []; }
+    if (!Array.isArray(proformas)) proformas = [];
+    if (proformas.length === 0) {
+        box.innerHTML += '<div style="padding:14px 6px;color:#888;">No hay proformas guardadas.<br>Guarda una proforma primero.</div>';
+    } else {
+        proformas.slice().reverse().forEach((item, idx, arr) => {
+            // El índice real en el array original (sin invertir)
+            const realIdx = proformas.length - 1 - idx;
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;gap:6px;';
+            const info = document.createElement('div');
+            info.innerHTML = `<div style=\'font-weight:600\'>${item.name || 'proforma_' + (realIdx+1)}</div><div style=\'font-size:11px;color:#666\'>${item.savedAt ? new Date(item.savedAt).toLocaleString() : ''}</div>`;
+            const openBtn = document.createElement('button');
+            openBtn.textContent = 'Abrir';
+            openBtn.className = 'inventory-action-btn';
+            openBtn.style.background = '#14b8ff';
+            openBtn.style.color = '#fff';
+            openBtn.onclick = function() {
+                overlay.remove();
+                cargarProformaEnPagina(item.html);
+            };
+            // Botón eliminar
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Eliminar';
+            delBtn.className = 'inventory-action-btn btn-rojo';
+            delBtn.style.background = '#ff3864';
+            delBtn.style.color = '#fff';
+            delBtn.onclick = function() {
+                if (!confirm('¿Eliminar esta proforma guardada?')) return;
+                let proformasActuales = [];
+                try {
+                    proformasActuales = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
+                } catch(e) { proformasActuales = []; }
+                if (!Array.isArray(proformasActuales)) proformasActuales = [];
+                // Buscar por nombre y fecha para evitar errores de índice
+                const idxEliminar = proformasActuales.findIndex(p => p && p.name === item.name && p.savedAt === item.savedAt);
+                if (idxEliminar !== -1 && proformasActuales[idxEliminar]) {
+                    proformasActuales.splice(idxEliminar, 1);
+                    localStorage.setItem('proformas_guardadas', JSON.stringify(proformasActuales));
+                }
+                overlay.remove();
+                cargarPagina();
+            };
+            row.appendChild(info); row.appendChild(openBtn); row.appendChild(delBtn); box.appendChild(row);
+        });
+    }
+    // Botón cerrar
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;gap:8px;';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Cerrar';
+    closeBtn.className = 'inventory-action-btn';
+    closeBtn.onclick = () => overlay.remove();
+    footer.appendChild(closeBtn); box.appendChild(footer);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+// Cargar la proforma seleccionada en la misma página (DOM)
+function cargarProformaEnPagina(html) {
+    // Crear un DOM temporal para extraer los datos
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    // Extraer valores de los campos principales
+    const nombreCliente = tempDiv.querySelector('#nombreCliente')?.value || '';
+    const nombreVendedor = tempDiv.querySelector('#nombreVendedorDisplay')?.innerText || '';
+    // Limpiar tabla de productos
+    const tabla = document.querySelector('table');
+    while (tabla.rows.length > 1) tabla.deleteRow(1);
+    // Extraer filas de productos
+    const filas = tempDiv.querySelectorAll('table tr');
+    for (let i = 1; i < filas.length; i++) {
+        const celdas = filas[i].querySelectorAll('td');
+        if (celdas.length >= 4) {
+            const nombre = celdas[0].innerText;
+            const cantidad = celdas[1].innerText;
+            const precio = celdas[2].innerText.replace('$','');
+            // Agregar producto a la tabla actual
+            var newRow = tabla.insertRow(tabla.rows.length);
+            var cell1 = newRow.insertCell(0);
+            var cell2 = newRow.insertCell(1);
+            var cell3 = newRow.insertCell(2);
+            var cell4 = newRow.insertCell(3);
+            var cell5 = newRow.insertCell(4);
+            var cell6 = newRow.insertCell(5);
+            cell1.innerHTML = nombre;
+            cell2.innerHTML = cantidad;
+            cell3.innerHTML = "$" + parseFloat(precio).toFixed(2);
+            cell4.innerHTML = "$" + (parseFloat(precio) * parseInt(cantidad)).toFixed(2);
+            // Botón editar
+            var editButton = document.createElement("button");
+            editButton.innerHTML = '<i class="fas fa-edit edit-icon" style="font-size:12px;"></i>';
+            editButton.className = "edit-btn";
+            editButton.style.padding = "2px 4px";
+            editButton.onclick = function() {
+                editarProducto(newRow, nombre, parseFloat(precio), parseInt(cantidad));
+            };
+            cell5.appendChild(editButton);
+            // Botón eliminar
+            var deleteButton = document.createElement("button");
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i>';
+            deleteButton.className = "close-btn";
+            deleteButton.style.padding = "2px 4px";
+            deleteButton.onclick = function() {
+                tabla.deleteRow(newRow.rowIndex);
+                calcularTotal();
+            };
+            cell6.appendChild(deleteButton);
+        }
+    }
+    // Actualizar campos principales
+    document.getElementById('nombreCliente').value = nombreCliente;
+    document.getElementById('nombreVendedorDisplay').innerText = nombreVendedor;
+    calcularTotal();
+}
+
+    // Función para establecer los eventos de editar y eliminar productos
+    function establecerEventos() {
+        var editButtons = document.querySelectorAll(".edit-btn");
+        var deleteButtons = document.querySelectorAll(".close-btn");
+
+        editButtons.forEach(function(button) {
+            button.onclick = function() {
+                var row = this.parentNode.parentNode;
+                var nombreProducto = row.cells[0].innerText;
+                var precio = parseFloat(row.cells[2].innerText.substring(1));
+                var cantidad = parseInt(row.cells[1].innerText);
+                editarProducto(row, nombreProducto, precio, cantidad);
+            };
+        });
+
+        deleteButtons.forEach(function(button) {
+            button.onclick = function() {
+                var row = this.parentNode.parentNode;
+                var nombreProducto = row.cells[0].innerText;
+                delete productos[nombreProducto];
+                row.parentNode.removeChild(row);
+                calcularTotal();
+            };
+        });
+    }
+   
+
+function appendNumber(number) {
+    var output = document.getElementById("calc-output");
+    output.value += number;
+}
+
+function appendDot() {
+    var output = document.getElementById("calc-output");
+    output.value += ".";
+}
+
+function appendOperator(operator) {
+    var output = document.getElementById("calc-output");
+    output.value += " " + operator + " ";
+}
+
+function clearOutput() {
+    document.getElementById("calc-output").value = "";
+}
+
+function calculateResult() {
+    var output = document.getElementById("calc-output");
+    try {
+        let expression = output.value
+            .replace(/%/g, "/100")
+            .replace(/x/g, "*");
+        // Usar new Function() es más seguro que eval()
+        output.value = new Function('return ' + expression)();
+    } catch (error) {
+        output.value = "Error";
+    }
+}
+
+</script>
+
+<script>
+// Lógica para el control de cantidad con rueda de ratón, arrastre y vibración
+document.addEventListener('DOMContentLoaded', function() {
+    const cantidadInput = document.getElementById('cantidad');
+    const scrollbar = document.getElementById('cantidad-scrollbar');
+    let scrollbarTimeout;
+
+    if (!cantidadInput || !scrollbar) return;
+
+    // --- Funciones de utilidad ---
+    function triggerFeedback() {
+        if (navigator.vibrate) {
+            navigator.vibrate(50); // Vibración corta de 50ms
+        }
+        scrollbar.classList.add('scrolling');
+        clearTimeout(scrollbarTimeout);
+        scrollbarTimeout = setTimeout(() => {
+            scrollbar.classList.remove('scrolling');
+        }, 300);
+    }
+
+    function incrementQuantity() {
+        const min = parseInt(cantidadInput.min, 10) || 1;
+        let currentValue = parseInt(cantidadInput.value, 10) || (min - 1);
+        cantidadInput.value = currentValue + 1;
+        triggerFeedback();
+    }
+
+    function decrementQuantity() {
+        const min = parseInt(cantidadInput.min, 10) || 1;
+        let currentValue = parseInt(cantidadInput.value, 10) || 1;
+        cantidadInput.value = Math.max(min, currentValue - 1);
+        triggerFeedback();
+    }
+
+    // --- Lógica para Rueda del Ratón (Wheel) ---
+    function handleWheel(event) {
+        event.preventDefault();
+        if (event.deltaY < 0 || event.deltaX < 0) {
+            incrementQuantity();
+        } else {
+            decrementQuantity();
+        }
+    }
+    cantidadInput.addEventListener('wheel', handleWheel, { passive: false });
+    scrollbar.addEventListener('wheel', handleWheel, { passive: false });
+
+    // --- Lógica para Arrastrar (Drag & Touch) ---
+    let isDragging = false;
+    let lastX = 0;
+    let accumulatedDelta = 0;
+    const sensitivity = 15; // Píxeles de arrastre para un incremento. Menor = más sensible.
+
+    function handleDragStart(event) {
+        isDragging = true;
+        lastX = event.pageX || event.touches[0].pageX;
+        accumulatedDelta = 0; // Reiniciar el acumulador
+        scrollbar.classList.add('scrolling');
+        event.preventDefault();
+    }
+
+    function handleDragMove(event) {
+        if (!isDragging) return;
+        event.preventDefault();
+        const currentX = event.pageX || event.touches[0].pageX;
+        const moveDeltaX = currentX - lastX;
+        lastX = currentX;
+
+        accumulatedDelta += moveDeltaX;
+
+        // Calcula cuántos incrementos aplicar basados en la distancia acumulada
+        const incrementsToApply = Math.floor(accumulatedDelta / sensitivity);
+
+        if (incrementsToApply !== 0) {
+            for (let i = 0; i < Math.abs(incrementsToApply); i++) {
+                incrementsToApply > 0 ? incrementQuantity() : decrementQuantity();
+            }
+            // Resta la distancia ya procesada del acumulador
+            accumulatedDelta -= incrementsToApply * sensitivity;
+        }
+    }
+
+    function handleDragEnd() { isDragging = false; }
+
+    scrollbar.addEventListener('mousedown', handleDragStart);
+    scrollbar.addEventListener('touchstart', handleDragStart, { passive: false });
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('mouseup', handleDragEnd);
+    document.addEventListener('touchend', handleDragEnd);
+});
+</script>
+
+<!-- Inventario actions (botones) -->
+    <div class="no-imagen" style="margin: 120px auto 0 auto; text-align:center; max-width: 520px; display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
+            <button id="open-inventory-btn" class="proforma-action-btn btn-azul" onclick="openInventory()" title="Inventario">📦 Inventario</button>
+            <button id="open-saved-inventory-btn" class="proforma-action-btn" style="background:#6c757d;color:#fff;" onclick="openSavedInventory()" title="Abrir inventario guardado">📂 Abrir guardado</button>
+        </div>
+    </div>
+
+<!-- Acceso a inventario (bloque separado) -->
+    <div class="no-imagen" style="margin:8px 0 0 0; text-align:left; max-width:520px; display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+        <label style="font-weight:bold; font-size: 15px; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 6px rgba(255,255,255,0.8);">Base de datos</label>
+        <form onsubmit="event.preventDefault(); verificarPassword();" style="display:flex;gap:8px;align-items:center;justify-content:center;width:100%;">
+            <input type="text" name="username" autocomplete="username" style="display:none;" aria-hidden="true" tabindex="-1">
+            <input type="password" id="password" name="password" placeholder="Ingresa la contraseña" autocomplete="current-password">
+            <button type="submit" id="accederBtn" class="action-button btn-verde">Acceder</button>
+        </form>
+        <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
+    </div>
+
+<script>
+    // Lógica para alternar entre tema claro (beige) y oscuro (negro)
+    document.addEventListener('DOMContentLoaded', function() {
+        const body = document.body;
+        const logo = document.getElementById('main-title');
+        const themeKey = 'proforma-theme';
+        const darkThemeClass = 'dark-theme';
+
+        // Función para aplicar el tema
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                body.classList.add(darkThemeClass);
+            } else {
+                body.classList.remove(darkThemeClass);
+            }
+            localStorage.setItem(themeKey, theme);
+        }
+
+        // Cargar el tema guardado al iniciar
+        const savedTheme = localStorage.getItem(themeKey) || 'light'; // 'light' es el beige por defecto
+        applyTheme(savedTheme);
+
+        // Alternar tema al hacer clic en el logo
+        logo.addEventListener('click', () => {
+            const newTheme = body.classList.contains(darkThemeClass) ? 'light' : 'dark';
+            applyTheme(newTheme);
+        });
+    });
+</script>
+
+
+    
+    
 </body>
 </html>
