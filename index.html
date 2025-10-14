@@ -549,6 +549,51 @@
             /* Esta técnica asegura que el gradiente respete las esquinas redondeadas */
         }
 
+        /* Estilos para celdas editables */
+        .editable-cell {
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            border-radius: 3px;
+            padding: 4px 6px;
+            position: relative;
+        }
+
+        .editable-cell:hover {
+            background-color: rgba(20, 184, 255, 0.1);
+            box-shadow: 0 0 0 1px rgba(20, 184, 255, 0.3);
+        }
+
+        .editable-cell::after {
+            content: "✏️";
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 8px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .editable-cell:hover::after {
+            opacity: 0.6;
+        }
+
+        /* Estilos para inputs de edición */
+        .editing-input {
+            border: 2px solid var(--neon-primary);
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: inherit;
+            background: #fff;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(20, 184, 255, 0.2);
+        }
+
+        /* Estilos para el botón basurero */
+        .delete-row-btn:hover {
+            transform: scale(1.05) !important;
+            box-shadow: 0 4px 8px rgba(255, 56, 100, 0.4) !important;
+        }
+
         /* Mantener el borde con gradiente en el foco y añadir el brillo */
         #nombreProducto:focus, #precioProducto:focus {
             box-shadow: inset 0 1px 3px rgba(0,0,0,0.06), 0 0 0 3px rgba(139, 92, 246, 0.2); /* Sombra violeta */
@@ -700,10 +745,11 @@
                                 <div style="margin: 4px 0; font-size: 10px; color: #888;">NOTA: Estos precios pueden variar sin previo aviso.</div>
                                 <table>
                                     <tr>
-                                        <th style="width: 50%;">Producto</th>
-                                        <th style="width: 15%;">Cant.</th>
-                                        <th style="width: 17%;">Precio Uni.</th>
-                                        <th style="width: 18%;">Subtotal</th>
+                                        <th style="width: 45%;">Producto</th>
+                                        <th style="width: 13%;">Cant.</th>
+                                        <th style="width: 15%;">Precio Uni.</th>
+                                        <th style="width: 17%;">Subtotal</th>
+                                        <th style="width: 10%;">Acción</th>
                                     </tr>
                                 </table>
                                 <h2 id="subtotal" style="font-size: 9px;"> </h2>
@@ -1596,16 +1642,42 @@ window.guardarPaginaPersonalizadaDesdeModal = guardarPaginaPersonalizadaDesdeMod
 // === SISTEMA DE AUTOGUARDADO ===
 let proformaId = null;
 let autoSaveTimeout = null;
+let hasAutoSaved = false; // Indica si la proforma actual ya fue autoguardada
 
 // Generar ID único para cada nueva proforma
 function generarProformaId() {
     return 'proforma_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
+// Obtener el próximo número secuencial para autoguardados
+function obtenerProximoNumeroProforma() {
+    let proformasAuto = [];
+    try {
+        proformasAuto = JSON.parse(localStorage.getItem('proformas_autoguardadas') || '[]');
+    } catch(e) { 
+        proformasAuto = []; 
+    }
+    if (!Array.isArray(proformasAuto)) proformasAuto = [];
+    
+    // Buscar el número más alto existente
+    let numeroMasAlto = 0;
+    proformasAuto.forEach(p => {
+        if (p.name && p.name.startsWith('Proforma ')) {
+            const numero = parseInt(p.name.replace('Proforma ', ''));
+            if (!isNaN(numero) && numero > numeroMasAlto) {
+                numeroMasAlto = numero;
+            }
+        }
+    });
+    
+    return numeroMasAlto + 1;
+}
+
 // Inicializar ID de proforma al cargar la página o al crear una nueva
 function inicializarProformaId() {
     if (!proformaId) {
         proformaId = generarProformaId();
+        hasAutoSaved = false; // Nueva proforma no ha sido autoguardada
     }
 }
 
@@ -1661,12 +1733,23 @@ function autoguardarProforma() {
         // Buscar si ya existe un autoguardado para esta proforma
         const indiceExistente = proformasAuto.findIndex(p => p.proformaId === proformaId);
         
+        let nombreProforma;
+        if (indiceExistente !== -1) {
+            // Mantener el nombre existente si ya fue autoguardada
+            nombreProforma = proformasAuto[indiceExistente].name;
+        } else {
+            // Generar nuevo nombre secuencial para nueva proforma
+            const numeroProforma = obtenerProximoNumeroProforma();
+            nombreProforma = `Proforma ${numeroProforma}`;
+        }
+        
         const datosAutoguardado = {
             proformaId: proformaId,
-            name: `${nombreCliente} (${fechaFormateada})`,
+            name: nombreProforma,
             savedAt: ahora.toISOString(),
             html: htmlClonado,
-            isAutoSave: true
+            isAutoSave: true,
+            lastUpdate: fechaFormateada
         };
         
         if (indiceExistente !== -1) {
@@ -1678,6 +1761,12 @@ function autoguardarProforma() {
         }
         
         localStorage.setItem('proformas_autoguardadas', JSON.stringify(proformasAuto));
+        
+        // Marcar que esta proforma ya fue autoguardada
+        hasAutoSaved = true;
+        
+        // Actualizar estado del botón Nueva Proforma
+        actualizarEstadoBotonNuevaProforma();
         
         // Mostrar indicador visual sutil de que se autoguardó
         mostrarIndicadorAutoguardado();
@@ -1720,13 +1809,29 @@ function mostrarIndicadorAutoguardado() {
 // Función para crear una nueva proforma (reiniciar ID)
 function crearNuevaProforma() {
     proformaId = generarProformaId();
-    // Limpiar campos si es necesario
-    // Esta función se puede llamar cuando el usuario quiere empezar una nueva proforma
+    hasAutoSaved = false; // Resetear flag de autoguardado
+}
+
+// Función para actualizar el estado visual del botón Nueva Proforma
+function actualizarEstadoBotonNuevaProforma() {
+    const boton = document.querySelector('button[onclick="nuevaProforma()"]');
+    if (boton) {
+        if (hasAutoSaved) {
+            boton.style.opacity = '1';
+            boton.style.cursor = 'pointer';
+            boton.title = 'Crear nueva proforma (la actual ya fue autoguardada)';
+        } else {
+            boton.style.opacity = '0.5';
+            boton.style.cursor = 'not-allowed';
+            boton.title = 'Realiza cambios en la proforma para que se autoguarde primero';
+        }
+    }
 }
 
 // Inicializar al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
     inicializarProformaId();
+    actualizarEstadoBotonNuevaProforma();
     
     // Configurar listeners para autoguardado en campos importantes
     const nombreCliente = document.getElementById('nombreCliente');
@@ -1769,7 +1874,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Función para limpiar la proforma y empezar una nueva
 function nuevaProforma() {
-    if (confirm('¿Estás seguro de que quieres crear una nueva proforma? Se perderán los datos actuales no guardados.')) {
+    // Verificar si la proforma actual ya fue autoguardada
+    if (!hasAutoSaved) {
+        alert('⚠️ Debes realizar cambios en la proforma para que se autoguarde antes de poder crear una nueva.');
+        return;
+    }
+    
+    if (confirm('¿Estás seguro de que quieres crear una nueva proforma? La proforma actual ya fue autoguardada.')) {
         // Crear nuevo ID de proforma
         crearNuevaProforma();
         
@@ -1802,6 +1913,9 @@ function nuevaProforma() {
         
         // Recalcular total
         calcularTotal();
+        
+        // Actualizar estado del botón
+        actualizarEstadoBotonNuevaProforma();
         
         // Mostrar confirmación
         const indicador = document.createElement('div');
@@ -2165,6 +2279,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var cell2 = newRow.insertCell(1);
             var cell3 = newRow.insertCell(2);
             var cell4 = newRow.insertCell(3);
+            var cell5 = newRow.insertCell(4);
 
             // Configurar celdas con contenido
             cell1.innerHTML = nombreProducto;
@@ -2189,14 +2304,40 @@ document.addEventListener('DOMContentLoaded', function() {
             cell2.onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
             cell3.onclick = function() { editarCelda(this, 'precio', nombreProducto); };
             
-            // Doble clic para eliminar fila (en cualquier celda)
-            newRow.ondblclick = function() {
+            // Botón basurero rojo para eliminar
+            var deleteButton = document.createElement("button");
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:14px;color:#fff;"></i>';
+            deleteButton.className = "delete-row-btn";
+            deleteButton.style.cssText = `
+                background: #ff3864;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 8px;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
+            `;
+            deleteButton.title = "Eliminar producto";
+            
+            // Efecto hover
+            deleteButton.onmouseenter = function() {
+                this.style.background = '#e63946';
+                this.style.transform = 'scale(1.05)';
+            };
+            deleteButton.onmouseleave = function() {
+                this.style.background = '#ff3864';
+                this.style.transform = 'scale(1)';
+            };
+            
+            deleteButton.onclick = function() {
                 if (confirm('¿Eliminar este producto?')) {
                     delete productos[nombreProducto];
                     table.deleteRow(newRow.rowIndex);
                     calcularTotal();
                 }
             };
+            
+            cell5.appendChild(deleteButton);
 
             calcularTotal();
             
@@ -2326,15 +2467,14 @@ document.addEventListener('DOMContentLoaded', function() {
             firstInput.select();
         }
 
-        // Limpiar las celdas de subtotal y botones
+        // Limpiar las celdas de subtotal y acciones
         row.cells[3].innerHTML = ''; // Celda de subtotal
-        row.cells[4].innerHTML = ''; // Celda de editar
+        row.cells[4].innerHTML = ''; // Celda de acciones (basurero)
 
-        // Añadir botones de "Aceptar" (visto) y "Cancelar" en la última celda
-        // Estos no necesitan ser flotantes, ya que la tabla no se deforma.
-        row.cells[5].innerHTML = `
-            <button onclick="actualizarProducto(this, '${nombreOriginal}')" style="background:transparent; border:none; color:green; cursor:pointer; font-size:14px; padding: 2px 4px;"><i class="fas fa-check"></i></button>
-            <button onclick="cancelarEdicion(this, '${nombreOriginal}')" style="background:transparent; border:none; color:red; cursor:pointer; font-size:14px; padding: 2px 4px;"><i class="fas fa-times"></i></button>
+        // Añadir botones de "Aceptar" (visto) y "Cancelar" en la celda de acciones
+        row.cells[4].innerHTML = `
+            <button onclick="actualizarProducto(this, '${nombreOriginal}')" style="background:#06d6a0; border:none; color:white; cursor:pointer; font-size:12px; padding: 4px 6px; border-radius:3px; margin-right:2px;"><i class="fas fa-check"></i></button>
+            <button onclick="cancelarEdicion(this, '${nombreOriginal}')" style="background:#ff3864; border:none; color:white; cursor:pointer; font-size:12px; padding: 4px 6px; border-radius:3px;"><i class="fas fa-times"></i></button>
         `;
     }
 
@@ -2362,9 +2502,40 @@ document.addEventListener('DOMContentLoaded', function() {
             row.cells[1].classList.remove('editing-cell');
             row.cells[2].classList.remove('editing-cell');
 
-            // Restaurar los botones de Editar y Eliminar
-            row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreProducto}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
-            row.cells[5].innerHTML = `<button onclick="eliminarFila(this, '${nombreProducto}')" class="close-btn" style="padding: 2px 4px;"><i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i></button>`;
+            // Restaurar el botón basurero rojo
+            var deleteButton = document.createElement("button");
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:14px;color:#fff;"></i>';
+            deleteButton.className = "delete-row-btn";
+            deleteButton.style.cssText = `
+                background: #ff3864;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 8px;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
+            `;
+            deleteButton.title = "Eliminar producto";
+            
+            deleteButton.onmouseenter = function() {
+                this.style.background = '#e63946';
+                this.style.transform = 'scale(1.05)';
+            };
+            deleteButton.onmouseleave = function() {
+                this.style.background = '#ff3864';
+                this.style.transform = 'scale(1)';
+            };
+            
+            deleteButton.onclick = function() {
+                if (confirm('¿Eliminar este producto?')) {
+                    delete productos[nombreProducto];
+                    row.parentNode.removeChild(row);
+                    calcularTotal();
+                }
+            };
+            
+            row.cells[4].innerHTML = '';
+            row.cells[4].appendChild(deleteButton);
 
             calcularTotal();
         } else {
@@ -2390,9 +2561,40 @@ document.addEventListener('DOMContentLoaded', function() {
             row.cells[1].classList.remove('editing-cell');
             row.cells[2].classList.remove('editing-cell');
 
-            // Restaurar botones con sus eventos
-            row.cells[4].innerHTML = `<button onclick="editarProducto(this.parentNode.parentNode, '${nombreOriginal}', ${precio}, ${cantidad})" class="edit-btn" style="padding: 2px 4px;"><i class="fas fa-edit edit-icon" style="font-size:12px;"></i></button>`;
-            row.cells[5].innerHTML = `<button onclick="eliminarFila(this, '${nombreOriginal}')" class="close-btn" style="padding: 2px 4px;"><i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i></button>`;
+            // Restaurar el botón basurero rojo
+            var deleteButton = document.createElement("button");
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:14px;color:#fff;"></i>';
+            deleteButton.className = "delete-row-btn";
+            deleteButton.style.cssText = `
+                background: #ff3864;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 8px;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
+            `;
+            deleteButton.title = "Eliminar producto";
+            
+            deleteButton.onmouseenter = function() {
+                this.style.background = '#e63946';
+                this.style.transform = 'scale(1.05)';
+            };
+            deleteButton.onmouseleave = function() {
+                this.style.background = '#ff3864';
+                this.style.transform = 'scale(1)';
+            };
+            
+            deleteButton.onclick = function() {
+                if (confirm('¿Eliminar este producto?')) {
+                    delete productos[nombreOriginal];
+                    row.parentNode.removeChild(row);
+                    calcularTotal();
+                }
+            };
+            
+            row.cells[4].innerHTML = '';
+            row.cells[4].appendChild(deleteButton);
         }
     }
     
@@ -2500,6 +2702,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${item.savedAt ? new Date(item.savedAt).toLocaleString('es-ES') : ''}
                         ${tipo === 'auto' ? ' (Automático)' : ''}
                     </div>
+                    ${item.lastUpdate && tipo === 'auto' ? `<div style='font-size:10px;color:#999;'>Última actualización: ${item.lastUpdate}</div>` : ''}
                 `;
                 
                 const buttonsContainer = document.createElement('div');
@@ -2512,10 +2715,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 openBtn.onclick = function() {
                     overlay.remove();
                     cargarProformaEnPagina(item.html);
-                    // Si se carga una proforma, crear nuevo ID para evitar sobrescribir
-                    if (tipo === 'manual' || tipo === 'auto') {
-                        crearNuevaProforma();
-                    }
+                    // Si se carga una proforma, crear nuevo ID y resetear autoguardado
+                    crearNuevaProforma(); // Esto resetea hasAutoSaved a false
                 };
                 
                 const delBtn = document.createElement('button');
@@ -2611,8 +2812,12 @@ function cargarProformaEnPagina(html) {
         const celdas = filas[i].querySelectorAll('td');
         if (celdas.length >= 4) {
             const nombre = celdas[0].innerText;
-            const cantidad = celdas[1].innerText;
-            const precio = celdas[2].innerText.replace('$','');
+            const cantidad = parseInt(celdas[1].innerText);
+            const precio = parseFloat(celdas[2].innerText.replace('$',''));
+            
+            // Agregar al objeto productos
+            productos[nombre] = { precio: precio, cantidad: cantidad };
+            
             // Agregar producto a la tabla actual
             var newRow = tabla.insertRow(tabla.rows.length);
             var cell1 = newRow.insertCell(0);
@@ -2620,30 +2825,72 @@ function cargarProformaEnPagina(html) {
             var cell3 = newRow.insertCell(2);
             var cell4 = newRow.insertCell(3);
             var cell5 = newRow.insertCell(4);
-            var cell6 = newRow.insertCell(5);
+            
+            // Configurar celdas con contenido y hacerlas editables
             cell1.innerHTML = nombre;
+            cell1.className = 'editable-cell';
+            cell1.title = nombre; // Tooltip para ver texto completo
+            cell1.dataset.originalName = nombre;
+            cell1.dataset.price = precio;
+            cell1.dataset.qty = cantidad;
+            
             cell2.innerHTML = cantidad;
-            cell3.innerHTML = "$" + parseFloat(precio).toFixed(2);
-            cell4.innerHTML = "$" + (parseFloat(precio) * parseInt(cantidad)).toFixed(2);
-            // Botón editar
-            var editButton = document.createElement("button");
-            editButton.innerHTML = '<i class="fas fa-edit edit-icon" style="font-size:12px;"></i>';
-            editButton.className = "edit-btn";
-            editButton.style.padding = "2px 4px";
-            editButton.onclick = function() {
-                editarProducto(newRow, nombre, parseFloat(precio), parseInt(cantidad));
-            };
-            cell5.appendChild(editButton);
-            // Botón eliminar
+            cell2.className = 'editable-cell';
+            cell2.dataset.originalName = nombre;
+            
+            cell3.innerHTML = "$" + precio.toFixed(2);
+            cell3.className = 'editable-cell';
+            cell3.dataset.originalName = nombre;
+            
+            cell4.innerHTML = "$" + (precio * cantidad).toFixed(2);
+
+            // Hacer celdas editables al hacer clic (crear closures para mantener el valor actualizado)
+            cell1.onclick = (function(nombreActual) {
+                return function() { editarCelda(this, 'nombre', nombreActual); };
+            })(nombre);
+            
+            cell2.onclick = (function(nombreActual) {
+                return function() { editarCelda(this, 'cantidad', nombreActual); };
+            })(nombre);
+            
+            cell3.onclick = (function(nombreActual) {
+                return function() { editarCelda(this, 'precio', nombreActual); };
+            })(nombre);
+            
+            // Botón basurero rojo para eliminar
             var deleteButton = document.createElement("button");
-            deleteButton.innerHTML = '<i class="fas fa-trash-alt close-btn" style="font-size:11px;"></i>';
-            deleteButton.className = "close-btn";
-            deleteButton.style.padding = "2px 4px";
-            deleteButton.onclick = function() {
-                tabla.deleteRow(newRow.rowIndex);
-                calcularTotal();
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:14px;color:#fff;"></i>';
+            deleteButton.className = "delete-row-btn";
+            deleteButton.style.cssText = `
+                background: #ff3864;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 8px;
+                cursor: pointer;
+                transition: background 0.2s;
+                box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
+            `;
+            deleteButton.title = "Eliminar producto";
+            
+            // Efecto hover
+            deleteButton.onmouseenter = function() {
+                this.style.background = '#e63946';
+                this.style.transform = 'scale(1.05)';
             };
-            cell6.appendChild(deleteButton);
+            deleteButton.onmouseleave = function() {
+                this.style.background = '#ff3864';
+                this.style.transform = 'scale(1)';
+            };
+            
+            deleteButton.onclick = function() {
+                if (confirm('¿Eliminar este producto?')) {
+                    delete productos[nombre];
+                    tabla.deleteRow(newRow.rowIndex);
+                    calcularTotal();
+                }
+            };
+            
+            cell5.appendChild(deleteButton);
         }
     }
     // Actualizar campos principales

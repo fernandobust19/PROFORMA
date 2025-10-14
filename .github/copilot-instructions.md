@@ -14,6 +14,8 @@ Este proyecto es una aplicación web para generar proformas y hojas de pedido de
 
 - **Eventos DOM**: La lógica se inicia en el evento `DOMContentLoaded`. Los botones se identifican por ID y se les asignan listeners.
 - **Generación dinámica**: Las tablas y ventanas emergentes se crean dinámicamente con JavaScript.
+- **Edición inline**: Celdas de productos son editables por clic directo, con indicadores visuales hover.
+- **Eliminación visual**: Botón basurero rojo (🗑️) en cada fila para eliminar productos.
 - **Obtención de datos**: La función `obtenerMaterialesFaltantes()` debe ser adaptada para integrar la lógica real de la aplicación. Actualmente retorna datos de ejemplo.
 - **Estilos**: El tema visual usa variables CSS para colores NEON y animaciones personalizadas.
 
@@ -28,22 +30,27 @@ Este proyecto es una aplicación web para generar proformas y hojas de pedido de
    - Selección de productos del dropdown
 
 ### Funciones clave de guardado:
-- `autoguardarProforma()`: Guardado automático con debounce de 2 segundos
+- `autoguardarProforma()`: Guardado automático con debounce de 2 segundos y nombres secuenciales
 - `generarProformaId()`: Genera ID único para cada proforma nueva
-- `crearNuevaProforma()`: Reinicia ID para nueva proforma
-- `nuevaProforma()`: Limpia interfaz y crea nueva proforma
+- `crearNuevaProforma()`: Reinicia ID y flag hasAutoSaved para nueva proforma
+- `nuevaProforma()`: Valida autoguardado antes de limpiar interfaz
+- `obtenerProximoNumeroProforma()`: Genera nombres secuenciales "Proforma N"
+- `actualizarEstadoBotonNuevaProforma()`: Control visual del botón según estado
 
 ### Carga de proformas:
 - Modal con pestañas: "Guardado Manual" y "Autoguardado"
 - Cada pestaña muestra lista independiente con fecha/hora
 - Botones: Abrir, Eliminar para cada proforma
 - Al cargar proforma existente se genera nuevo ID para evitar sobrescribir
+- **Productos cargados son editables**: Clic en celdas activa edición inline
+- **Botones basurero**: Cada fila tiene botón rojo para eliminar productos
 
 ## Flujos críticos
 
-- **Nueva proforma**: Botón "📄 Nueva Proforma" → confirma → limpia campos → genera nuevo ID → activa autoguardado
-- **Autoguardado**: Cambio detectado → debounce 2s → clona DOM → limpia modales → guarda en localStorage → muestra indicador visual
-- **Cargar proforma**: Botón "⬆️ Cargar Proforma" → modal pestañas → seleccionar → cargar datos → generar nuevo ID
+- **Nueva proforma**: Botón "📄 Nueva Proforma" → verifica autoguardado → confirma → limpia campos → genera nuevo ID
+- **Autoguardado**: Cambio detectado → debounce 2s → genera nombre secuencial → guarda en localStorage → habilita "Nueva Proforma"
+- **Cargar proforma**: Botón "⬆️ Cargar Proforma" → modal pestañas → seleccionar → cargar datos → generar nuevo ID → deshabilitar "Nueva Proforma"
+- **Nombres secuenciales**: Autoguardados usan patrón "Proforma 1", "Proforma 2", etc.
 
 ## Integraciones y dependencias
 
