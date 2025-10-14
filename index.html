@@ -665,6 +665,87 @@
             outline: none;
             font-size: 1em;
         }
+
+    /* Estilos para la tabla de materiales */
+    #materiales-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    
+    #materiales-table th {
+        background: linear-gradient(135deg, var(--neon-primary), var(--neon-secondary));
+        color: white;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+    
+    #materiales-table th:first-child {
+        border-top-left-radius: 8px;
+    }
+    
+    #materiales-table th:last-child {
+        border-top-right-radius: 8px;
+    }
+    
+    #materiales-table td {
+        border-bottom: 1px solid #eee;
+        transition: all 0.2s ease;
+    }
+    
+    .material-row:hover {
+        background-color: rgba(20, 184, 255, 0.1) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(20, 184, 255, 0.15);
+    }
+    
+    #materiales-table-container::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    #materiales-table-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+    
+    #materiales-table-container::-webkit-scrollbar-thumb {
+        background: var(--neon-primary);
+        border-radius: 4px;
+    }
+    
+    #materiales-table-container::-webkit-scrollbar-thumb:hover {
+        background: var(--neon-secondary);
+    }
+    
+    /* Animación de entrada para el modal de materiales */
+    #materiales-modal {
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    #materiales-view {
+        animation: slideInUp 0.3s ease-out;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideInUp {
+        from { 
+            transform: translateY(30px); 
+            opacity: 0; 
+        }
+        to { 
+            transform: translateY(0); 
+            opacity: 1; 
+        }
+    }
     </style>
 </head>
 
@@ -728,7 +809,7 @@
                                 <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
                             </div>
                             <div class="proforma-main-actions-container">
-                                <button class="proforma-action-btn btn-verde" onclick="nuevaProforma()">📄 Nueva Proforma</button>
+                                <button class="proforma-action-btn btn-verde" onclick="mostrarListaMateriales()">� Ver Todos los Materiales</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
                             </div>
@@ -796,6 +877,45 @@
                                             <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
                                             <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">Borrar borrador</button>
                                             <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">Guardar y Cerrar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Sección Lista de Materiales -->
+                        <div class="materiales-section">
+                            <!-- Modal de Lista de Materiales (oculto inicialmente) -->
+                            <div id="materiales-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;">
+                                <div id="materiales-view" style="background:#fff;width:95%;max-width:1200px;max-height:90vh;overflow:auto;padding:20px;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.25);margin:2vh auto;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;">
+                                        <h2 style="margin:0;color:var(--neon-primary);font-weight:700;">📋 Lista Completa de Materiales</h2>
+                                        <button onclick="cerrarListaMateriales()" style="background:var(--neon-danger);color:white;border:none;border-radius:50%;width:35px;height:35px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+                                    </div>
+                                    <!-- Buscador para la lista de materiales -->
+                                    <div style="position:relative;margin-bottom:15px;">
+                                        <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#666;font-size:14px;"></i>
+                                        <input type="text" id="materiales-search" placeholder="Buscar material por nombre..." oninput="filtrarMateriales()" style="width:100%;padding:10px 10px 10px 40px;border:2px solid var(--neon-primary);border-radius:8px;font-size:14px;box-sizing:border-box;">
+                                    </div>
+                                    <!-- Tabla de materiales -->
+                                    <div id="materiales-table-container" style="max-height:65vh;overflow:auto;border:1px solid #ddd;border-radius:8px;">
+                                        <table id="materiales-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+                                            <thead style="background:var(--neon-primary);color:white;position:sticky;top:0;z-index:1;">
+                                                <tr>
+                                                    <th style="padding:12px 8px;text-align:left;border-right:1px solid rgba(255,255,255,0.3);width:60%;">Material</th>
+                                                    <th style="padding:12px 8px;text-align:right;border-right:1px solid rgba(255,255,255,0.3);width:20%;">Precio Unitario</th>
+                                                    <th style="padding:12px 8px;text-align:center;width:20%;">Estado</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="materiales-tbody">
+                                                <!-- Los materiales se cargan dinámicamente aquí -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <!-- Footer con información -->
+                                    <div style="margin-top:15px;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;color:#666;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                                            <span id="materiales-count">Total: 0 materiales</span>
+                                            <span style="font-style:italic;">Los precios pueden variar sin previo aviso</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1649,6 +1769,17 @@ function generarProformaId() {
     return 'proforma_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
+// Función para obtener el total actual de la proforma
+function obtenerTotalActual() {
+    const totalElement = document.getElementById("total");
+    if (totalElement) {
+        const totalText = totalElement.textContent || totalElement.innerHTML;
+        const match = totalText.match(/\$(\d+(?:\.\d{2})?)/);
+        return match ? parseFloat(match[1]) : 0;
+    }
+    return 0;
+}
+
 // Obtener el próximo número secuencial para autoguardados
 function obtenerProximoNumeroProforma() {
     let proformasAuto = [];
@@ -1734,13 +1865,23 @@ function autoguardarProforma() {
         const indiceExistente = proformasAuto.findIndex(p => p.proformaId === proformaId);
         
         let nombreProforma;
+        const totalActual = obtenerTotalActual();
+        
         if (indiceExistente !== -1) {
-            // Mantener el nombre existente si ya fue autoguardada
-            nombreProforma = proformasAuto[indiceExistente].name;
+            // Actualizar el nombre existente con el nuevo total
+            const numeroExistente = proformasAuto[indiceExistente].name.match(/Proforma (\d+)/);
+            const numero = numeroExistente ? numeroExistente[1] : obtenerProximoNumeroProforma();
+            nombreProforma = `Proforma ${numero}`;
+            if (totalActual > 0) {
+                nombreProforma += ` - $${totalActual.toFixed(2)}`;
+            }
         } else {
             // Generar nuevo nombre secuencial para nueva proforma
             const numeroProforma = obtenerProximoNumeroProforma();
             nombreProforma = `Proforma ${numeroProforma}`;
+            if (totalActual > 0) {
+                nombreProforma += ` - $${totalActual.toFixed(2)}`;
+            }
         }
         
         const datosAutoguardado = {
@@ -3050,6 +3191,226 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('touchmove', handleDragMove, { passive: false });
     document.addEventListener('mouseup', handleDragEnd);
     document.addEventListener('touchend', handleDragEnd);
+});
+</script>
+
+<script>
+// ----- LISTA DE MATERIALES: funciones para mostrar todos los materiales -----
+
+function mostrarListaMateriales() {
+    document.getElementById('materiales-modal').style.display = 'flex';
+    document.getElementById('materiales-search').value = ''; // Limpiar buscador
+    cargarTodosLosMateriales();
+}
+
+function cerrarListaMateriales() {
+    document.getElementById('materiales-modal').style.display = 'none';
+}
+
+async function cargarTodosLosMateriales() {
+    const tbody = document.getElementById('materiales-tbody');
+    tbody.innerHTML = ''; // Limpiar contenido previo
+    
+    // Mostrar indicador de carga
+    const loadingRow = tbody.insertRow();
+    loadingRow.innerHTML = `
+        <td colspan="3" style="text-align:center;padding:20px;color:#666;">
+            <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
+            Cargando materiales...
+        </td>
+    `;
+    
+    let materiales = [];
+    
+    try {
+        // Intentar cargar desde Google Sheets primero
+        const SHEET_ID = "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
+        const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
+        
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.text();
+            const productos = data.split("\n").map(line => line.split(","));
+            
+            productos.forEach(function(producto) {
+                const nombreProducto = producto[0];
+                const precioProducto = producto[1] ? parseFloat(producto[1]) : 0;
+                
+                if (nombreProducto && nombreProducto.trim()) {
+                    materiales.push({
+                        nombre: nombreProducto.trim(),
+                        precio: isNaN(precioProducto) ? 0 : precioProducto
+                    });
+                }
+            });
+        } else {
+            throw new Error('No se pudo cargar desde Google Sheets');
+        }
+    } catch (error) {
+        console.log('Error cargando desde Google Sheets, intentando desde cache local...');
+        
+        // Fallback: intentar cargar desde cache
+        const productosCacheados = localStorage.getItem('productos_cache');
+        if (productosCacheados) {
+            try {
+                const productosTexto = JSON.parse(productosCacheados);
+                materiales = productosTexto.map(texto => {
+                    const partes = texto.split(' - $');
+                    return {
+                        nombre: partes[0],
+                        precio: partes[1] ? parseFloat(partes[1]) : 0
+                    };
+                });
+            } catch (e) {
+                console.log('Error al cargar desde cache');
+            }
+        }
+        
+        // Si cache tampoco funciona, usar el dropdown
+        if (materiales.length === 0) {
+            const selectProducto = document.getElementById("producto");
+            if (selectProducto && selectProducto.options.length > 0) {
+                for (let i = 0; i < selectProducto.options.length; i++) {
+                    const texto = selectProducto.options[i].text;
+                    const partes = texto.split(' - $');
+                    materiales.push({
+                        nombre: partes[0],
+                        precio: partes[1] ? parseFloat(partes[1]) : 0
+                    });
+                }
+            }
+        }
+    }
+    
+    // Limpiar el indicador de carga
+    tbody.innerHTML = '';
+    
+    // Si no hay materiales, mostrar mensaje de error
+    if (materiales.length === 0) {
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td colspan="3" style="text-align:center;padding:20px;color:#666;">
+                <i class="fas fa-exclamation-circle" style="font-size:24px;margin-bottom:10px;display:block;color:#ff6b6b;"></i>
+                <div style="margin-bottom:8px;">No se pudieron cargar los materiales</div>
+                <div style="font-size:11px;color:#999;">Verifica tu conexión a internet e intenta de nuevo</div>
+            </td>
+        `;
+        document.getElementById('materiales-count').textContent = 'Total: 0 materiales';
+        return;
+    }
+
+    // Filtrar solo materiales que tienen precio mayor a 0
+    const materialesFiltrados = materiales.filter(material => material.precio > 0);
+    
+    // Si no hay materiales con precio, mostrar mensaje específico
+    if (materialesFiltrados.length === 0) {
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td colspan="3" style="text-align:center;padding:20px;color:#666;">
+                <i class="fas fa-info-circle" style="font-size:24px;margin-bottom:10px;display:block;color:#ffc107;"></i>
+                <div style="margin-bottom:8px;">No hay materiales con precio disponible</div>
+                <div style="font-size:11px;color:#999;">Solo se muestran materiales que tienen precio asignado</div>
+            </td>
+        `;
+        document.getElementById('materiales-count').textContent = 'Total: 0 materiales con precio';
+        return;
+    }
+    
+    // Mantener el orden original de la lista (NO ordenar alfabéticamente)
+    
+    // Crear filas para cada material
+    materialesFiltrados.forEach((material, index) => {
+        const row = tbody.insertRow();
+        row.className = 'material-row';
+        
+        // Alternar colores de fila
+        const bgColor = index % 2 === 0 ? '#fff' : '#f8f9fa';
+        row.style.backgroundColor = bgColor;
+        
+        // Como solo mostramos materiales con precio, todos están disponibles
+        const estado = 'Disponible';
+        const estadoColor = '#28a745';
+        
+        row.innerHTML = `
+            <td style="padding:8px 12px;border-right:1px solid #dee2e6;vertical-align:middle;">
+                <div style="font-weight:500;color:#333;">${material.nombre}</div>
+            </td>
+            <td style="padding:8px 12px;border-right:1px solid #dee2e6;text-align:right;vertical-align:middle;">
+                <div style="font-weight:600;color:#007bff;">
+                    $${material.precio.toFixed(2)}
+                </div>
+            </td>
+            <td style="padding:8px 12px;text-align:center;vertical-align:middle;">
+                <span style="padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;color:white;background:${estadoColor};">
+                    ${estado}
+                </span>
+            </td>
+        `;
+        
+        // Agregar efecto hover
+        row.addEventListener('mouseenter', function() {
+            if (this.style.backgroundColor !== 'rgba(20, 184, 255, 0.1)') {
+                this.dataset.originalBg = this.style.backgroundColor;
+                this.style.backgroundColor = 'rgba(20, 184, 255, 0.1)';
+            }
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            if (this.dataset.originalBg !== undefined) {
+                this.style.backgroundColor = this.dataset.originalBg;
+                delete this.dataset.originalBg;
+            }
+        });
+    });
+    
+    // Actualizar contador
+    document.getElementById('materiales-count').textContent = `Total: ${materialesFiltrados.length} materiales con precio`;
+    
+    // Almacenar materiales para el filtro
+    window.todosLosMateriales = materialesFiltrados;
+}
+
+function filtrarMateriales() {
+    const busqueda = document.getElementById('materiales-search').value.toLowerCase().trim();
+    const rows = document.querySelectorAll('.material-row');
+    let materialesVisibles = 0;
+    
+    if (busqueda === '') {
+        // Mostrar todos
+        rows.forEach(row => {
+            row.style.display = '';
+            materialesVisibles++;
+        });
+    } else {
+        // Filtrar por búsqueda
+        rows.forEach(row => {
+            const nombreMaterial = row.querySelector('td:first-child div').textContent.toLowerCase();
+            if (nombreMaterial.includes(busqueda)) {
+                row.style.display = '';
+                materialesVisibles++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+    
+    // Actualizar contador
+    const sufijo = busqueda ? ' (filtrados)' : ' con precio';
+    document.getElementById('materiales-count').textContent = `Total: ${materialesVisibles} materiales${sufijo}`;
+}
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('materiales-modal').style.display === 'flex') {
+        cerrarListaMateriales();
+    }
+});
+
+// Cerrar modal al hacer clic en el fondo
+document.getElementById('materiales-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        cerrarListaMateriales();
+    }
 });
 </script>
 
