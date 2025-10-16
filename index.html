@@ -749,7 +749,7 @@
     </style>
 </head>
 
-<body onload="inicializarProductos();">
+<body>
 
     <!-- Calculadora (movida aquí para que exista en el DOM) -->
     <div id="calculator">
@@ -2244,85 +2244,189 @@ document.addEventListener('DOMContentLoaded', function() {
     // Variable global para almacenar todas las opciones de productos originales
     let todosLosProductosOptions = [];
 
-    // Función para cargar productos desde la caché local (localStorage)
-    function cargarProductosDesdeCache() {
-        const productosCacheados = localStorage.getItem('productos_cache');
-        if (productosCacheados) {
-            console.log("Cargando productos desde el cerebro (caché)...");
-            const productos = JSON.parse(productosCacheados);
-            const selectProducto = document.getElementById("producto");
-            const fragment = document.createDocumentFragment(); // Optimización: usar fragment
-            selectProducto.innerHTML = ''; // Limpiar select
-            todosLosProductosOptions = []; // Limpiar array global
+    // Productos básicos embebidos para carga rápida inicial
+    const productosBasicosEmbebidos = [
+        "CEMENTO GRIS 50 KG - $7.50",
+        "HIERRO 12 MM x 12 M - $12.80",
+        "HIERRO 10 MM x 12 M - $9.50",
+        "HIERRO 8 MM x 12 M - $6.20",
+        "BLOQUE 15x20x40 - $0.85",
+        "BLOQUE 10x20x40 - $0.75",
+        "ARENA FINA M3 - $18.00",
+        "RIPIO M3 - $20.00",
+        "PIEDRA BOLA M3 - $22.00",
+        "LADRILLO ROJO - $0.15",
+        "TUBO PVC 110 MM x 6 M - $25.50",
+        "TUBO PVC 75 MM x 6 M - $18.90"
+    ];
 
-            productos.forEach(productoTexto => {
-                const option = document.createElement("option");
-                option.text = productoTexto;
-                todosLosProductosOptions.push(option);
-                fragment.appendChild(option.cloneNode(true)); // Añadir al fragment
-            });
-            
-            selectProducto.appendChild(fragment); // Una sola inserción al DOM
-            return true; // Indica que se cargó desde caché
-        }
-        return false; // No hay nada en caché
+    // Función para cargar productos básicos embebidos (súper rápida)
+    function cargarProductosBasicos() {
+        console.log("Cargando productos básicos embebidos...");
+        const selectProducto = document.getElementById("producto");
+        const fragment = document.createDocumentFragment();
+        selectProducto.innerHTML = '';
+        todosLosProductosOptions = [];
+
+        productosBasicosEmbebidos.forEach(productoTexto => {
+            const option = document.createElement("option");
+            option.text = productoTexto;
+            todosLosProductosOptions.push(option);
+            fragment.appendChild(option.cloneNode(true));
+        });
+        
+        selectProducto.appendChild(fragment);
+        return true;
     }
 
-    // Función para cargar productos desde Google Sheets
+    // Función optimizada para cargar productos desde la caché local (localStorage)
+    function cargarProductosDesdeCache() {
+        try {
+            const productosCacheados = localStorage.getItem('productos_cache');
+            if (productosCacheados) {
+                const productos = JSON.parse(productosCacheados);
+                
+                // Verificar que el cache tiene datos válidos
+                if (productos && productos.length > 0) {
+                    console.log("⚡ Cargando productos desde cache (" + productos.length + " productos)");
+                    const selectProducto = document.getElementById("producto");
+                    const fragment = document.createDocumentFragment();
+                    selectProducto.innerHTML = '';
+                    todosLosProductosOptions = [];
+
+                    // Usar requestAnimationFrame para no bloquear la UI
+                    productos.forEach(productoTexto => {
+                        const option = document.createElement("option");
+                        option.text = productoTexto;
+                        todosLosProductosOptions.push(option);
+                        fragment.appendChild(option.cloneNode(true));
+                    });
+                    
+                    selectProducto.appendChild(fragment);
+                    return true;
+                }
+            }
+        } catch (error) {
+            console.log("⚠️ Error al cargar desde cache:", error);
+        }
+        return false; // No hay cache válido
+    }
+
+    // Función optimizada para cargar productos desde Google Sheets
     async function cargarProductosDesdeGoogleSheets() {
         const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
         try {
-            const response = await fetch(url);
+            // Usar AbortController para timeout rápido
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos máximo
+            
+            const response = await fetch(url, { 
+                signal: controller.signal,
+                cache: 'default' // Permitir cache del navegador
+            });
+            clearTimeout(timeoutId);
+            
             if (!response.ok) {
                 throw new Error('La respuesta de la red no fue exitosa.');
             }
+            
             const data = await response.text();
             const productos = data.split("\n").map(line => line.split(","));
-            const productosParaCache = []; // Array para guardar en el "cerebro"
+            const productosParaCache = [];
             
-            // Verificar que los productos se han cargado
-            if (productos.length > 0) {
+            // Solo procesar si hay productos válidos
+            if (productos.length > 5) { // Mínimo 5 productos para considerar válida la respuesta
                 const selectProducto = document.getElementById("producto");
-                const fragment = document.createDocumentFragment(); // Optimización: usar fragment
-                selectProducto.innerHTML = ''; // Limpiar el select
-                todosLosProductosOptions = []; // Limpiar array global
+                const fragment = document.createDocumentFragment();
+                
+                // No limpiar si ya hay productos cargados, solo actualizar
+                const shouldClear = selectProducto.options.length <= productosBasicosEmbebidos.length;
+                if (shouldClear) {
+                    selectProducto.innerHTML = '';
+                    todosLosProductosOptions = [];
+                }
 
                 productos.forEach(function(producto) {
                     const nombreProducto = producto[0];
+                    if (!nombreProducto || nombreProducto.trim() === '') return; // Saltar filas vacías
+                    
                     const precioProducto = producto[1] ? parseFloat(producto[1]) : null;
                     const option = document.createElement("option");
                     let textoOpcion;
                     
-                    if (!isNaN(precioProducto)) {
-                        textoOpcion = `${nombreProducto} - $${precioProducto.toFixed(2)}`;
+                    if (!isNaN(precioProducto) && precioProducto > 0) {
+                        textoOpcion = `${nombreProducto.trim()} - $${precioProducto.toFixed(2)}`;
                     } else {
-                        textoOpcion = `${nombreProducto}`;
+                        textoOpcion = `${nombreProducto.trim()}`;
                     }
+                    
                     option.text = textoOpcion;
-                    productosParaCache.push(textoOpcion); // Guardar texto para la caché
-                    todosLosProductosOptions.push(option);
-                    fragment.appendChild(option.cloneNode(true)); // Añadir al fragment en lugar del select
+                    productosParaCache.push(textoOpcion);
+                    
+                    if (shouldClear) {
+                        todosLosProductosOptions.push(option);
+                        fragment.appendChild(option.cloneNode(true));
+                    }
                 });
                 
-                selectProducto.appendChild(fragment); // Una sola inserción al DOM
+                if (shouldClear) {
+                    selectProducto.appendChild(fragment);
+                }
                 
-                // Guardar la lista fresca de productos en el "cerebro" (localStorage)
-                localStorage.setItem('productos_cache', JSON.stringify(productosParaCache));
-                console.log("Cerebro actualizado con nuevos productos desde Google Sheets.");
+                // Guardar en cache solo si se cargaron más productos que los básicos
+                if (productosParaCache.length > productosBasicosEmbebidos.length) {
+                    localStorage.setItem('productos_cache', JSON.stringify(productosParaCache));
+                    console.log("✅ Productos actualizados desde Google Sheets (" + productosParaCache.length + " productos)");
+                }
             }
         } catch (error) {
-            console.error("Error al cargar desde Google Sheets. Se usarán los datos del cerebro si existen.", error);
-            // No es necesario hacer nada más, porque ya se intentó cargar desde la caché.
+            if (error.name === 'AbortError') {
+                console.log("⚠️ Timeout en carga de Google Sheets - usando datos locales");
+            } else {
+                console.log("⚠️ Error al cargar desde Google Sheets - usando datos locales:", error.message);
+            }
         }
     }
 
-    // Inicialización de productos
+    // Inicialización de productos optimizada
     function inicializarProductos() {
-        // 1. Intenta actualizar desde internet. Si falla, usa la caché.
-        cargarProductosDesdeGoogleSheets().catch(() => {
-            cargarProductosDesdeCache();
-        });
+        // 1. Cargar inmediatamente desde caché (rápido)
+        const cacheLoaded = cargarProductosDesdeCache();
+        
+        // 2. Si no hay cache, cargar productos básicos embebidos
+        if (!cacheLoaded) {
+            cargarProductosBasicos();
+        }
+        
+        // 3. Actualizar en segundo plano desde internet (sin bloquear la UI)
+        setTimeout(() => {
+            cargarProductosDesdeGoogleSheets().catch(error => {
+                console.log("No se pudo actualizar desde Google Sheets, usando datos locales");
+            });
+        }, 100); // Delay mínimo para no bloquear la carga inicial
     }
+
+    // Inicializar productos tan pronto como el DOM esté listo (más rápido que onload)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', inicializarProductos);
+    } else {
+        // Si el DOM ya está listo, ejecutar inmediatamente
+        inicializarProductos();
+    }
+
+    // Precargar elementos críticos para mejorar la experiencia
+    document.addEventListener('DOMContentLoaded', function() {
+        // Precargar fecha de la proforma
+        if (typeof mostrarFechaProforma === 'function') {
+            mostrarFechaProforma();
+        }
+        
+        // Configurar listeners de autoguardado inmediatamente
+        const nombreClienteInput = document.getElementById('nombreCliente');
+        if (nombreClienteInput && typeof autoguardarProforma === 'function') {
+            nombreClienteInput.addEventListener('input', autoguardarProforma);
+        }
+    });
 
     function limpiarBuscador() {
         const buscadorInput = document.getElementById("buscador");
@@ -2336,42 +2440,58 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
+    // Función optimizada de búsqueda de productos
     function buscarProducto() {
-        const busqueda = document.getElementById("buscador").value.toLowerCase();
+        const busqueda = document.getElementById("buscador").value.toLowerCase().trim();
         const select = document.getElementById("producto");
-        const palabras = busqueda.split(" ").filter(p => p.trim() !== "");
 
-        // Limpiar opciones actuales
-        select.innerHTML = '';
-
-        // Filtrar desde la lista maestra y añadir las opciones que coinciden
-        // La nueva lógica permite que las palabras de búsqueda aparezcan en cualquier orden
-        const productosFiltrados = todosLosProductosOptions.filter(option => {
-            const nombreCompleto = option.textContent.toLowerCase();
-            let nombreProducto = nombreCompleto.split(' - $')[0]; // Obtener solo la parte del nombre, antes del precio
-            
-            // Lógica mejorada: Separa números de letras (ej: "100mm" -> "100 mm") para que la búsqueda por palabra completa funcione.
-            nombreProducto = nombreProducto.replace(/(\d+)([a-zA-Z]+)/g, '$1 $2').replace(/([a-zA-Z]+)(\d+)/g, '$1 $2');
-
-            // Lógica mejorada: Busca palabras que COMIENCEN con el término de búsqueda para resultados instantáneos y precisos.
-            return palabras.every(palabra => new RegExp('\\b' + palabra).test(nombreProducto));
-        });
-
-        if (productosFiltrados.length > 0) {
-            productosFiltrados.forEach(option => {
-                select.add(option.cloneNode(true));
+        // Si no hay búsqueda, mostrar todos los productos
+        if (!busqueda) {
+            select.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            todosLosProductosOptions.forEach(option => {
+                fragment.appendChild(option.cloneNode(true));
             });
-            // Seleccionar la primera coincidencia y actualizar campos
+            select.appendChild(fragment);
             select.selectedIndex = 0;
             if (typeof copiarNombreYPrecio === 'function') {
                 copiarNombreYPrecio();
             }
-        } else {
-            // Si no hay coincidencias, limpiar los campos
-            select.selectedIndex = -1;
-            document.getElementById("nombreProducto").value = "";
-            document.getElementById("precioProducto").value = "";
+            return;
         }
+
+        const palabras = busqueda.split(" ").filter(p => p.length > 0);
+        
+        // Usar requestAnimationFrame para búsquedas fluidas
+        requestAnimationFrame(() => {
+            select.innerHTML = '';
+            
+            // Optimización: filtrar usando includes simple para mayor velocidad
+            const productosFiltrados = todosLosProductosOptions.filter(option => {
+                const nombreCompleto = option.textContent.toLowerCase();
+                // Búsqueda simple y rápida usando includes
+                return palabras.every(palabra => nombreCompleto.includes(palabra));
+            });
+
+            if (productosFiltrados.length > 0) {
+                const fragment = document.createDocumentFragment();
+                productosFiltrados.forEach(option => {
+                    fragment.appendChild(option.cloneNode(true));
+                });
+                select.appendChild(fragment);
+                
+                // Seleccionar la primera coincidencia y actualizar campos
+                select.selectedIndex = 0;
+                if (typeof copiarNombreYPrecio === 'function') {
+                    copiarNombreYPrecio();
+                }
+            } else {
+                // Si no hay coincidencias, limpiar los campos
+                select.selectedIndex = -1;
+                document.getElementById("nombreProducto").value = "";
+                document.getElementById("precioProducto").value = "";
+            }
+        });
     }
     
     
@@ -3211,79 +3331,50 @@ async function cargarTodosLosMateriales() {
     const tbody = document.getElementById('materiales-tbody');
     tbody.innerHTML = ''; // Limpiar contenido previo
     
-    // Mostrar indicador de carga
-    const loadingRow = tbody.insertRow();
-    loadingRow.innerHTML = `
-        <td colspan="3" style="text-align:center;padding:20px;color:#666;">
-            <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
-            Cargando materiales...
-        </td>
-    `;
-    
     let materiales = [];
     
-    try {
-        // Intentar cargar desde Google Sheets primero
-        const SHEET_ID = "2PACX-1vSfw3ECUvPvgX3ks-91DxTrywFIxO8AfCXNwEsuK6BQxQxu4k3NCdXiSd3603BctKJFqm9wv4ltIs5U";
-        const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
-        
-        const response = await fetch(url);
-        if (response.ok) {
-            const data = await response.text();
-            const productos = data.split("\n").map(line => line.split(","));
-            
-            productos.forEach(function(producto) {
-                const nombreProducto = producto[0];
-                const precioProducto = producto[1] ? parseFloat(producto[1]) : 0;
-                
-                if (nombreProducto && nombreProducto.trim()) {
-                    materiales.push({
-                        nombre: nombreProducto.trim(),
-                        precio: isNaN(precioProducto) ? 0 : precioProducto
-                    });
-                }
+    // Primero intentar cargar desde cache o productos ya cargados (súper rápido)
+    const productosCacheados = localStorage.getItem('productos_cache');
+    if (productosCacheados) {
+        try {
+            const productosTexto = JSON.parse(productosCacheados);
+            materiales = productosTexto.map(texto => {
+                const partes = texto.split(' - $');
+                return {
+                    nombre: partes[0],
+                    precio: partes[1] ? parseFloat(partes[1]) : 0
+                };
             });
-        } else {
-            throw new Error('No se pudo cargar desde Google Sheets');
-        }
-    } catch (error) {
-        console.log('Error cargando desde Google Sheets, intentando desde cache local...');
-        
-        // Fallback: intentar cargar desde cache
-        const productosCacheados = localStorage.getItem('productos_cache');
-        if (productosCacheados) {
-            try {
-                const productosTexto = JSON.parse(productosCacheados);
-                materiales = productosTexto.map(texto => {
-                    const partes = texto.split(' - $');
-                    return {
-                        nombre: partes[0],
-                        precio: partes[1] ? parseFloat(partes[1]) : 0
-                    };
-                });
-            } catch (e) {
-                console.log('Error al cargar desde cache');
-            }
-        }
-        
-        // Si cache tampoco funciona, usar el dropdown
-        if (materiales.length === 0) {
-            const selectProducto = document.getElementById("producto");
-            if (selectProducto && selectProducto.options.length > 0) {
-                for (let i = 0; i < selectProducto.options.length; i++) {
-                    const texto = selectProducto.options[i].text;
-                    const partes = texto.split(' - $');
-                    materiales.push({
-                        nombre: partes[0],
-                        precio: partes[1] ? parseFloat(partes[1]) : 0
-                    });
-                }
-            }
+        } catch (e) {
+            console.log('Error al cargar desde cache para materiales');
         }
     }
     
-    // Limpiar el indicador de carga
-    tbody.innerHTML = '';
+    // Si no hay cache, usar productos básicos embebidos
+    if (materiales.length === 0) {
+        materiales = productosBasicosEmbebidos.map(texto => {
+            const partes = texto.split(' - $');
+            return {
+                nombre: partes[0],
+                precio: partes[1] ? parseFloat(partes[1]) : 0
+            };
+        });
+    }
+    
+    // Si aún no hay materiales, usar el dropdown como último recurso
+    if (materiales.length === 0) {
+        const selectProducto = document.getElementById("producto");
+        if (selectProducto && selectProducto.options.length > 0) {
+            for (let i = 0; i < selectProducto.options.length; i++) {
+                const texto = selectProducto.options[i].text;
+                const partes = texto.split(' - $');
+                materiales.push({
+                    nombre: partes[0],
+                    precio: partes[1] ? parseFloat(partes[1]) : 0
+                });
+            }
+        }
+    }
     
     // Si no hay materiales, mostrar mensaje de error
     if (materiales.length === 0) {
