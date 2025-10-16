@@ -267,26 +267,17 @@
     }
 
     #main-title {
-        cursor: pointer;
-        user-select: none; /* Evita que el texto se seleccione al hacer clic */
-        outline: none; /* Evita el recuadro de foco */
-        -webkit-tap-highlight-color: transparent; /* Evita el resaltado en móviles */
-        transition: filter 0.2s ease, transform 0.2s ease;
-        display: inline-block; /* Para que el hover no ocupe toda la línea */
+        user-select: none; /* Evita que el texto se seleccione */
+        display: inline-block;
         height: 70px; /* Altura del logo */
         vertical-align: middle;
-    }
-    #main-title:hover {
-        /* Efecto de brillo para la imagen */
-        filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9));
-        transform: scale(1.03); /* Ligero zoom al pasar el mouse */
     }
 
 
 
     body {
         font-family: 'Arial', sans-serif;
-        background-color: #f5f5dc; /* Color beige para mejorar rendimiento */
+        background-color: lab(94.28% -3.95 -1.38); /* Color gris claro */
         margin: 0;
         padding: 20px;
         font-size: 12px;
@@ -3523,7 +3514,7 @@ document.getElementById('materiales-modal').addEventListener('click', function(e
     </div>
 
 <script>
-    // Lógica para alternar entre tema claro (beige) y oscuro (negro)
+    // Lógica para alternar entre tema claro (gris claro) y oscuro (negro)
     document.addEventListener('DOMContentLoaded', function() {
         const body = document.body;
         const logo = document.getElementById('main-title');
@@ -3541,14 +3532,10 @@ document.getElementById('materiales-modal').addEventListener('click', function(e
         }
 
         // Cargar el tema guardado al iniciar
-        const savedTheme = localStorage.getItem(themeKey) || 'light'; // 'light' es el beige por defecto
+        const savedTheme = localStorage.getItem(themeKey) || 'light'; // 'light' es el gris claro por defecto
         applyTheme(savedTheme);
 
-        // Alternar tema al hacer clic en el logo
-        logo.addEventListener('click', () => {
-            const newTheme = body.classList.contains(darkThemeClass) ? 'light' : 'dark';
-            applyTheme(newTheme);
-        });
+        // Logo ahora es solo imagen decorativa, sin funcionalidad de clic
     });
 </script>
 
