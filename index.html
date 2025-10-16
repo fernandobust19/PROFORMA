@@ -578,6 +578,15 @@
         }
 
         /* Estilos para el botón basurero */
+        .delete-row-btn {
+            padding: 4px 6px !important;
+            border-radius: 3px !important;
+        }
+        
+        .delete-row-btn i {
+            font-size: 10px !important;
+        }
+        
         .delete-row-btn:hover {
             transform: scale(1.05) !important;
             box-shadow: 0 4px 8px rgba(255, 56, 100, 0.4) !important;
@@ -794,8 +803,8 @@
                                 </div>
                             </div>
                             <div class="action-buttons-container" style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
-                                <button id="agregarBtn" class="action-button btn-verde btn-small" style="margin-right: auto;" onclick="agregarProducto()">✅ Agregar producto</button>
-                                <button id="guardarImagenBtn" class="action-button btn-azul btn-small" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
+                                <button id="agregarBtn" class="action-button btn-verde" style="margin-right: auto;" onclick="agregarProducto()">✅ Agregar producto</button>
+                                <button id="guardarImagenBtn" class="action-button btn-azul" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
                             </div>
                             <div class="proforma-main-actions-container">
                                 <button class="proforma-action-btn btn-verde" onclick="mostrarListaMateriales()">� Ver Todos los Materiales</button>
@@ -2556,13 +2565,13 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Botón basurero rojo para eliminar
             var deleteButton = document.createElement("button");
-            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:14px;color:#fff;"></i>';
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:10px;color:#fff;"></i>';
             deleteButton.className = "delete-row-btn";
             deleteButton.style.cssText = `
                 background: #ff3864;
                 border: none;
-                border-radius: 4px;
-                padding: 6px 8px;
+                border-radius: 3px;
+                padding: 4px 6px;
                 cursor: pointer;
                 transition: all 0.2s;
                 box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
