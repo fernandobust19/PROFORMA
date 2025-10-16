@@ -156,6 +156,14 @@
     border-color: rgba(255,56,100,0.35);
 }
 
+#calc-buttons .btn-close { /* cerrar calculadora */
+    color: var(--neon-danger);
+    background: rgba(255,56,100,0.15);
+    border-color: rgba(255,56,100,0.5);
+    font-size: 18px;
+    font-weight: bold;
+}
+
 /* Igual (=) especial */
 #equal-btn.btn-equal {
     grid-row: span 2;
@@ -772,8 +780,9 @@
             <button class="btn btn-num" onclick="appendNumber(2)">2</button>
             <button class="btn btn-num" onclick="appendNumber(3)">3</button>
             <button id="equal-btn" class="btn btn-equal" onclick="calculateResult()">=</button>
-            <button class="btn btn-num" onclick="appendNumber(0)" style="grid-column: span 2;">0</button>
+            <button class="btn btn-num" onclick="appendNumber(0)">0</button>
             <button class="btn btn-num" onclick="appendDot()">.</button>
+            <button class="btn btn-close" onclick="cerrarCalculadora()">✕</button>
         </div>
     </div>
 
@@ -873,7 +882,7 @@
                                     <div class="inventory-footer">
                                         <div style="display:flex;gap:8px;align-items:center;">
                                             <button id="add-new-inventory-item-btn" class="inventory-action-btn" style="background:#06d6a0;color:#fff;min-width:50px;" onclick="addNewInventoryRow()" title="Añadir nuevo producto">+</button>
-                                            <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">⏸️ Pausar</button>
+                                            <button id="pause-btn" class="inventory-action-btn" style="background:#f6c84c;color:#111;" onclick="pauseInventory()">🗕 Minimizar</button>
                                             <button id="clear-draft-btn" class="inventory-action-btn btn-rojo" onclick="clearInventoryDraft()">Borrar borrador</button>
                                             <button id="save-close-btn" class="inventory-action-btn btn-verde" onclick="saveInventoryAndClose()">Guardar y Cerrar</button>
                                         </div>
@@ -1590,7 +1599,6 @@ function pauseInventory() {
     // quitar prevención de unload
     window.removeEventListener('beforeunload', preventUnload);
     updateInventoryButtonState();
-    alert('Inventario pausado. Puedes continuar en otro momento haciendo clic en Inventario.');
 }
 
 function clearInventoryDraft() {
@@ -3216,6 +3224,10 @@ function calculateResult() {
     } catch (error) {
         output.value = "Error";
     }
+}
+
+function cerrarCalculadora() {
+    document.getElementById("calculator").style.display = "none";
 }
 
 </script>
