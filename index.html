@@ -285,7 +285,7 @@
 
     body {
         font-family: 'Arial', sans-serif;
-        background-color: lab(94.28% -3.95 -1.38); /* Color gris claro */
+        background-color: #f5f5f5; /* Color gris claro equivalente a lab(94.28% -3.95 -1.38) */
         margin: 0;
         padding: 20px;
         font-size: 12px;
@@ -2203,7 +2203,13 @@ document.addEventListener('DOMContentLoaded', function() {
             html2canvas(proforma, {
                 scale: 2.5, // Aumentar la escala para mejor calidad en la imagen final
                 useCORS: true,
-                backgroundColor: "#ffffff"
+                allowTaint: true,
+                backgroundColor: "#ffffff",
+                logging: false, // Reducir logs de debug
+                ignoreElements: function(element) {
+                    // Ignorar elementos que puedan tener estilos problemáticos
+                    return element.classList && element.classList.contains('ignore-canvas');
+                }
             }).then((canvas) => {
                 const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
 
@@ -2219,11 +2225,24 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('No se pudo abrir una nueva pestaña. Por favor, deshabilita el bloqueador de pop-ups.');
                     }
                 } else {
-                    // Para otros dispositivos, forzar la descarga directa
-                    const enlace = document.createElement("a");
-                    enlace.href = dataUrl;
-                    enlace.download = "proforma.jpg";
-                    enlace.click();
+                    // Para otros dispositivos, intentar descarga directa con fallback
+                    try {
+                        const enlace = document.createElement("a");
+                        enlace.href = dataUrl;
+                        enlace.download = "proforma_" + new Date().toISOString().slice(0,10) + ".jpg";
+                        document.body.appendChild(enlace);
+                        enlace.click();
+                        document.body.removeChild(enlace);
+                    } catch (error) {
+                        console.error('Error en descarga directa:', error);
+                        // Fallback: abrir en nueva pestaña como en iOS
+                        const newTab = window.open();
+                        if (newTab) {
+                            newTab.document.write('<html><head><title>Proforma - Clic derecho para guardar</title></head><body style="margin:0; background:#f0f0f0; display:flex; flex-direction:column; align-items:center; padding:20px;"><h3 style="color:#333;">Haz clic derecho en la imagen y selecciona "Guardar imagen como..."</h3><img src="' + dataUrl + '" style="max-width:100%; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.1);" alt="Proforma"></body></html>');
+                        } else {
+                            alert('No se pudo descargar automáticamente. Habilita las ventanas emergentes e intenta de nuevo.');
+                        }
+                    }
                 }
 
                 // Limpiar y restaurar la vista original
@@ -2234,7 +2253,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 proforma.classList.remove('force-light-theme-for-capture'); // Quitar la clase temporal
             }).catch(err => {
                 console.error('Error html2canvas:', err);
-                alert('No fue posible generar la imagen en este dispositivo.');
+                
+                // Restaurar vista antes de mostrar error
+                vendedorDisplay.innerText = "";
+                clienteInput.value = originalClienteValue;
+                ocultar.forEach(el => el.style.display = '');
+                proforma.style.cssText = originalProformaStyle;
+                proforma.classList.remove('force-light-theme-for-capture');
+                
+                alert('Error al generar la imagen: ' + err.message + '\n\nTips para solucionarlo:\n• Verifica tu conexión a internet\n• Actualiza tu navegador\n• Intenta con un navegador diferente\n• Desactiva extensiones de bloqueo');
             });
         }, 80);
     }
