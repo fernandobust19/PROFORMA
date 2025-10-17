@@ -951,6 +951,12 @@ function openInventory() {
     loadProductsForInventory();
     // restaurar borrador si existe
     restoreInventoryDraft();
+    
+    // Recalcular todas las restas después de que todo esté cargado
+    setTimeout(() => {
+        recalcularTodasLasRestas();
+    }, 200); // Delay para asegurar que todo esté completamente cargado
+    
     // prevenir cierre accidental de la pestaña/ventana mientras se realiza el inventario
     document.getElementById('inventory-search').value = ''; // Limpiar buscador
     window.addEventListener('beforeunload', preventUnload);
@@ -1547,12 +1553,69 @@ function restoreInventoryDraft() {
                 input.dataset.grossValue = savedValue === '0' ? '' : savedValue; // Restaurar también el valor bruto
             }
         });
+        
+        // Reasignar event listeners después de restaurar los datos
+        reassignInventoryEventListeners();
     } catch (e) { /* ignore */ }
 }
 
 function autosaveOutputsDraft() {
     const draft = collectOutputsData();
     localStorage.setItem('salidas_draft', JSON.stringify(draft));
+}
+
+function reassignInventoryEventListeners() {
+    // Reasignar event listeners para todos los inputs de entrada y salida
+    const entradaInputs = document.querySelectorAll('#inventory-list input[type="number"]');
+    const salidaInputs = document.querySelectorAll('#outputs-list input[type="number"]');
+    
+    entradaInputs.forEach(qtyInput => {
+        // Remover listeners existentes clonando el elemento
+        const newQtyInput = qtyInput.cloneNode(true);
+        qtyInput.parentNode.replaceChild(newQtyInput, qtyInput);
+        
+        const idx = newQtyInput.id.replace('entrada-input-', '');
+        const qtyInputSalida = document.getElementById(`salida-input-${idx}`);
+        const outputIndicator = document.getElementById(`output-indicator-${idx}`);
+        
+        if (qtyInputSalida) {
+            // Listener para el input de entrada
+            newQtyInput.addEventListener('input', (e) => {
+                e.target.dataset.grossValue = e.target.value;
+                autosaveInventoryDraft();
+                // Re-aplicar la resta con el nuevo valor de entrada
+                const salidaValue = parseFloat(qtyInputSalida.value) || 0;
+                const entradaBruta = parseFloat(e.target.dataset.grossValue) || 0;
+                const resultado = entradaBruta - salidaValue;
+                e.target.value = resultado === 0 ? '' : resultado;
+            });
+        }
+    });
+    
+    salidaInputs.forEach(qtyInputSalida => {
+        // Remover listeners existentes clonando el elemento
+        const newQtyInputSalida = qtyInputSalida.cloneNode(true);
+        qtyInputSalida.parentNode.replaceChild(newQtyInputSalida, qtyInputSalida);
+        
+        const idx = newQtyInputSalida.id.replace('salida-input-', '');
+        const qtyInput = document.getElementById(`entrada-input-${idx}`);
+        const outputIndicator = document.getElementById(`output-indicator-${idx}`);
+        
+        if (qtyInput) {
+            // Listener para el input de salida
+            newQtyInputSalida.addEventListener('input', () => {
+                autosaveOutputsDraft();
+                const entradaBruta = parseFloat(qtyInput.dataset.grossValue) || 0;
+                const salidaValue = parseFloat(newQtyInputSalida.value) || 0;
+                const resultado = entradaBruta - salidaValue;
+                // Actualizar el valor visible de la entrada y el indicador
+                qtyInput.value = resultado === 0 ? '' : resultado;
+                if (outputIndicator) {
+                    outputIndicator.textContent = (salidaValue > 0) ? `-${salidaValue}` : '';
+                }
+            });
+        }
+    });
 }
 
 function restoreOutputsDraft() {
@@ -1569,28 +1632,42 @@ function restoreOutputsDraft() {
             else if (nameDiv) name = nameDiv.textContent.trim();
             if (!name) return;
 
-            const salidaInput = r.querySelector('input[type="number"]');
-            const idx = salidaInput.id.split('-').pop();
-            const entradaInput = document.getElementById(`entrada-input-${idx}`);
-            if (!entradaInput) return;
-
-            const outputIndicator = document.getElementById(`output-indicator-${idx}`);
             const savedValue = draft[name];
             if (savedValue !== undefined) {
-                const input = r.querySelector('input');
+                const input = r.querySelector('input[type="number"]');
                 input.value = savedValue === '0' ? '' : savedValue;
-                // Actualizar indicador visual en la otra pestaña
-                if (input.value && input.value !== '0' && outputIndicator) {
-                    const salidaValue = parseFloat(input.value) || 0;
-                    outputIndicator.textContent = `-${salidaValue}`;
-                    // Realizar la resta visual al restaurar, usando el valor bruto
-                    const entradaBruta = parseFloat(entradaInput.dataset.grossValue) || 0;
-                    const resultado = entradaBruta - salidaValue;
-                    entradaInput.value = resultado === 0 ? '' : resultado;
-                }
             }
         });
+        
+        // Después de restaurar todas las salidas, recalcular todas las restas
+        recalcularTodasLasRestas();
+        
     } catch (e) { /* ignore */ }
+}
+
+function recalcularTodasLasRestas() {
+    // Recalcular todas las restas basándose en los valores actuales de entradas y salidas
+    const entradaInputs = document.querySelectorAll('#inventory-list input[type="number"]');
+    
+    entradaInputs.forEach(entradaInput => {
+        const idx = entradaInput.id.replace('entrada-input-', '');
+        const salidaInput = document.getElementById(`salida-input-${idx}`);
+        const outputIndicator = document.getElementById(`output-indicator-${idx}`);
+        
+        if (salidaInput && entradaInput.dataset.grossValue) {
+            const entradaBruta = parseFloat(entradaInput.dataset.grossValue) || 0;
+            const salidaValue = parseFloat(salidaInput.value) || 0;
+            const resultado = entradaBruta - salidaValue;
+            
+            // Actualizar el valor visible de la entrada
+            entradaInput.value = resultado === 0 ? '' : resultado;
+            
+            // Actualizar el indicador visual
+            if (outputIndicator) {
+                outputIndicator.textContent = (salidaValue > 0) ? `-${salidaValue}` : '';
+            }
+        }
+    });
 }
 
 function pauseInventory() {
