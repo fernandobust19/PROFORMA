@@ -2704,8 +2704,11 @@ document.addEventListener('DOMContentLoaded', function() {
             deleteButton.onclick = function() {
                 if (confirm('¿Eliminar este producto?')) {
                     delete productos[nombreProducto];
-                    table.deleteRow(newRow.rowIndex);
+                    // Encontrar la fila actual basándose en el botón que se hizo clic
+                    var currentRow = this.closest('tr');
+                    currentRow.parentNode.removeChild(currentRow);
                     calcularTotal();
+                    autoguardarProforma();
                 }
             };
             
@@ -2903,6 +2906,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     delete productos[nombreProducto];
                     row.parentNode.removeChild(row);
                     calcularTotal();
+                    autoguardarProforma();
                 }
             };
             
@@ -2962,6 +2966,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     delete productos[nombreOriginal];
                     row.parentNode.removeChild(row);
                     calcularTotal();
+                    autoguardarProforma();
                 }
             };
             
@@ -3257,8 +3262,11 @@ function cargarProformaEnPagina(html) {
             deleteButton.onclick = function() {
                 if (confirm('¿Eliminar este producto?')) {
                     delete productos[nombre];
-                    tabla.deleteRow(newRow.rowIndex);
+                    // Encontrar la fila actual basándose en el botón que se hizo clic
+                    var currentRow = this.closest('tr');
+                    currentRow.parentNode.removeChild(currentRow);
                     calcularTotal();
+                    autoguardarProforma();
                 }
             };
             
