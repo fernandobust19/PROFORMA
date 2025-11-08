@@ -847,6 +847,9 @@
                                 <h2 id="subtotal" style="font-size: 9px;"> </h2>
                                 <h2 id="iva" style="font-size: 8px;"></h2>
                                 <h2 id="total" style="font-size: 15px;">Total: $0.00</h2>
+                                <div id="contenedorTotalTarjeta" style="font-size: 13px; color:#0a1a29; margin-top:4px; display:none;">
+                                    <b>Valor con tarjeta de crédito:</b> <span id="totalTarjetaMonto">$0.00</span>
+                                </div>
                                 <div style="margin-top: 6px; font-size: 11px;">
                                     <span><b>Vendedor:</b> <span id="nombreVendedorDisplay" style="font-weight: bold;"></span></span><br>
                                     <span id="fechaProforma"></span><br>
@@ -3700,6 +3703,21 @@ function abrirModalTarjeta() {
             <div style="font-weight:800;font-size:16px;">Tarifas porcentuales</div>
             <button class="proforma-action-btn" style="background:#e74c3c;color:#fff;" id="cerrar-modal-tarjeta">✖</button>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;padding:8px;border:1px dashed #14b8ff55;border-radius:10px;">
+            <div style="grid-column:1/-1;font-weight:700;font-size:12px;">Base de cálculo</div>
+            <label style="display:flex;align-items:center;gap:6px;">
+                <input type="radio" name="baseTarjeta" id="base-proforma" value="proforma" checked>
+                <span>Usar total de proforma</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;">
+                <input type="radio" name="baseTarjeta" id="base-manual" value="manual">
+                <span>Monto manual</span>
+            </label>
+            <div style="grid-column:1/-1;display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:700;">$</span>
+                <input type="number" id="monto-manual" step="0.01" min="0" value="0.00" style="flex:0 0 160px;padding:6px 10px;border:1px solid #14b8ff77;border-radius:8px;">
+            </div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
             <label style="display:flex;flex-direction:column;gap:4px;">
                 <span style="font-weight:700;font-size:12px;">Tipo de pago</span>
@@ -3731,7 +3749,8 @@ function abrirModalTarjeta() {
             </label>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
-            <button class="proforma-action-btn btn-celeste" id="btn-calcular-tarjeta">Calcular</button>
+            <button class="proforma-action-btn" style="background:#6c757d;color:#fff;" id="btn-calcular-tarjeta">Calcular</button>
+            <button class="proforma-action-btn btn-celeste" id="btn-aplicar-proforma">Aplicar en proforma</button>
         </div>
         <div id="resultado-tarjeta" style="margin-top:10px;font-size:14px;">
             <div><b>Porcentaje:</b> <span id="rt-porcentaje">—</span></div>
@@ -3748,18 +3767,18 @@ function abrirModalTarjeta() {
 
     const tarifas = {
         debito: { any: 2.24 },
-        credito_corriente: { any: 4.50 },
+        credito_corriente: { any: 6.00 },
         diferido_con_intereses: {
-            guayaquil_amex: {3:6,6:6,9:6,12:6},
-            guayaquil_mv: {3:6,6:6,9:6,12:6},
-            pacificard_mv: {3:5,6:5,9:5,12:5},
-            diners_discover: {3:5,6:5,9:5,12:5},
-            pichincha_mv: {3:5,6:5,9:5,12:5}
+            guayaquil_amex: {3:8,6:8,9:8,12:8},
+            guayaquil_mv: {3:8,6:8,9:8,12:8},
+            pacificard_mv: {3:8,6:8,9:8,12:8},
+            diners_discover: {3:8,6:8,9:8,12:8},
+            pichincha_mv: {3:8,6:8,9:8,12:8}
         },
         diferido_sin_intereses: {
             guayaquil_amex: {3:7,9:9},
             guayaquil_mv: {3:7,9:9},
-            pacificard_mv: {3:6,9:10}
+            pacificard_mv: {3:8,9:10}
         }
     };
 
@@ -3767,6 +3786,10 @@ function abrirModalTarjeta() {
     const selBanco = box.querySelector('#sel-banco-tarjeta');
     const selMeses = box.querySelector('#sel-meses');
     const btnCalc = box.querySelector('#btn-calcular-tarjeta');
+    const btnAplicar = box.querySelector('#btn-aplicar-proforma');
+    const rbProforma = box.querySelector('#base-proforma');
+    const rbManual = box.querySelector('#base-manual');
+    const inputManual = box.querySelector('#monto-manual');
 
     function filtrarBancosPorTipo() {
         const tipo = selTipo.value;
@@ -3797,6 +3820,14 @@ function abrirModalTarjeta() {
         return m ? parseFloat(m[1]) : 0;
     }
 
+    function obtenerBase() {
+        if (rbManual.checked) {
+            const v = parseFloat(inputManual.value);
+            return isNaN(v) ? 0 : v;
+        }
+        return obtenerTotalActualSeguro();
+    }
+
     function calcularYMostrar() {
         const tipo = selTipo.value;
         const banco = selBanco.value;
@@ -3809,7 +3840,7 @@ function abrirModalTarjeta() {
             porcentaje = tarifas[tipo][banco][meses] ?? null;
         }
 
-        const total = obtenerTotalActualSeguro();
+        const total = obtenerBase();
         if (porcentaje == null) {
             box.querySelector('#rt-porcentaje').textContent = 'N/D';
             box.querySelector('#rt-recargo').textContent = '—';
@@ -3821,13 +3852,33 @@ function abrirModalTarjeta() {
         box.querySelector('#rt-porcentaje').textContent = porcentaje.toFixed(2) + '%';
         box.querySelector('#rt-recargo').textContent = '$' + recargo.toFixed(2);
         box.querySelector('#rt-total').textContent = '$' + totalConTarjeta.toFixed(2);
+        return { porcentaje, recargo, totalConTarjeta };
     }
 
     selTipo.addEventListener('change', ()=>{ filtrarBancosPorTipo(); calcularYMostrar(); });
     selBanco.addEventListener('change', calcularYMostrar);
     selMeses.addEventListener('change', calcularYMostrar);
     btnCalc.addEventListener('click', calcularYMostrar);
+    [rbProforma, rbManual].forEach(rb => rb.addEventListener('change', ()=>{
+        inputManual.disabled = rbProforma.checked;
+        calcularYMostrar();
+    }));
+    inputManual.addEventListener('input', ()=>{ if (rbManual.checked) calcularYMostrar(); });
 
+    btnAplicar.addEventListener('click', ()=>{
+        const res = calcularYMostrar();
+        if (!res) return;
+        const cont = document.getElementById('contenedorTotalTarjeta');
+        const span = document.getElementById('totalTarjetaMonto');
+        if (cont && span) {
+            span.textContent = '$' + res.totalConTarjeta.toFixed(2);
+            cont.style.display = 'block';
+        }
+    });
+
+    // Inicializar valores
+    inputManual.value = obtenerTotalActualSeguro().toFixed(2);
+    inputManual.disabled = true;
     filtrarBancosPorTipo();
 }
 </script>
