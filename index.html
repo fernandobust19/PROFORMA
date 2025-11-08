@@ -229,11 +229,14 @@
     transform: translateY(-1px) scale(1.02);
     box-shadow: 0 4px 12px #0003, 0 0 0 2px #fff, 0 0 10px #fff8 inset;
 }
-.proforma-action-btn:active, .action-button:active {
-    /* Efecto de hundido al presionar */
-    transform: translateY(1px) scale(0.98);
-    box-shadow: inset 0 3px 6px rgba(0,0,0,0.2);
-}
+    .proforma-action-btn:active, .action-button:active {
+        /* Efecto de hundido al presionar */
+        transform: translateY(1px) scale(0.98);
+        box-shadow: inset 0 3px 6px rgba(0,0,0,0.2);
+    }
+
+    /* Botón fijo para tarjeta al fondo a la derecha */
+    .tarjeta-fixed { position: fixed; right: 14px; bottom: 14px; z-index: 10000; }
 
     /* Estilos específicos para el footer del modal de inventario */
     #inventory-view { position: relative; }
@@ -3647,6 +3650,11 @@ document.getElementById('materiales-modal').addEventListener('click', function(e
         <p id="mensaje" style="color: red; display: none;">Contraseña incorrecta. Intenta de nuevo.</p>
     </div>
 
+    <!-- Botón fijo al pie para cálculo con tarjeta (no se incluye en la imagen) -->
+    <div class="no-imagen tarjeta-fixed">
+        <button class="proforma-action-btn btn-celeste" onclick="abrirModalTarjeta()">💳 Tarjeta (3-6-9-12)</button>
+    </div>
+
 <script>
     // Lógica para alternar entre tema claro (gris claro) y oscuro (negro)
     document.addEventListener('DOMContentLoaded', function() {
@@ -3673,8 +3681,156 @@ document.getElementById('materiales-modal').addEventListener('click', function(e
     });
 </script>
 
+</body>
+</html>
 
-    
-    
+<script>
+// Modal de cálculo de tarifas de tarjeta
+function abrirModalTarjeta() {
+    if (document.getElementById('modal-tarjeta')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-tarjeta';
+    overlay.style = 'position:fixed;inset:0;background:rgba(0,0,0,.36);z-index:12000;display:flex;align-items:center;justify-content:center;';
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:14px;min-width:340px;max-width:92vw;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:16px 16px 12px 16px;transform:translateY(-18px) scale(.98);animation:popIn 300ms cubic-bezier(.2,1.2,.3,1) forwards;';
+    box.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="font-weight:800;font-size:16px;">Tarifas porcentuales</div>
+            <button class="proforma-action-btn" style="background:#e74c3c;color:#fff;" id="cerrar-modal-tarjeta">✖</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+            <label style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-weight:700;font-size:12px;">Tipo de pago</span>
+                <select id="sel-tipo-tarjeta" style="padding:6px;border:1px solid #14b8ff77;border-radius:8px;">
+                    <option value="debito">Débito</option>
+                    <option value="credito_corriente">Crédito corriente</option>
+                    <option value="diferido_con_intereses">Diferido con intereses</option>
+                    <option value="diferido_sin_intereses">Diferido sin intereses</option>
+                </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-weight:700;font-size:12px;">Banco / Tarjeta</span>
+                <select id="sel-banco-tarjeta" style="padding:6px;border:1px solid #14b8ff77;border-radius:8px;">
+                    <option value="guayaquil_amex">Bco. Guayaquil AMEX</option>
+                    <option value="guayaquil_mv">Bco. Guayaquil Mastercard/Visa</option>
+                    <option value="pacificard_mv">Pacificard Mastercard/Visa</option>
+                    <option value="diners_discover">BCO. Diners Club / Discover</option>
+                    <option value="pichincha_mv">Banco Pichincha Mastercard/Visa</option>
+                </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;grid-column:1 / -1;">
+                <span style="font-weight:700;font-size:12px;">Meses</span>
+                <select id="sel-meses" style="padding:6px;border:1px solid #14b8ff77;border-radius:8px;max-width:200px;">
+                    <option value="3">3</option>
+                    <option value="6">6</option>
+                    <option value="9">9</option>
+                    <option value="12">12</option>
+                </select>
+            </label>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+            <button class="proforma-action-btn btn-celeste" id="btn-calcular-tarjeta">Calcular</button>
+        </div>
+        <div id="resultado-tarjeta" style="margin-top:10px;font-size:14px;">
+            <div><b>Porcentaje:</b> <span id="rt-porcentaje">—</span></div>
+            <div><b>Recargo:</b> <span id="rt-recargo">—</span></div>
+            <div><b>Total con tarjeta:</b> <span id="rt-total">—</span></div>
+        </div>
+    `;
+
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.remove(); });
+    box.querySelector('#cerrar-modal-tarjeta').addEventListener('click', ()=> overlay.remove());
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const tarifas = {
+        debito: { any: 2.24 },
+        credito_corriente: { any: 4.50 },
+        diferido_con_intereses: {
+            guayaquil_amex: {3:6,6:6,9:6,12:6},
+            guayaquil_mv: {3:6,6:6,9:6,12:6},
+            pacificard_mv: {3:5,6:5,9:5,12:5},
+            diners_discover: {3:5,6:5,9:5,12:5},
+            pichincha_mv: {3:5,6:5,9:5,12:5}
+        },
+        diferido_sin_intereses: {
+            guayaquil_amex: {3:7,9:9},
+            guayaquil_mv: {3:7,9:9},
+            pacificard_mv: {3:6,9:10}
+        }
+    };
+
+    const selTipo = box.querySelector('#sel-tipo-tarjeta');
+    const selBanco = box.querySelector('#sel-banco-tarjeta');
+    const selMeses = box.querySelector('#sel-meses');
+    const btnCalc = box.querySelector('#btn-calcular-tarjeta');
+
+    function filtrarBancosPorTipo() {
+        const tipo = selTipo.value;
+        const opcionesDisponibles = new Set();
+        if (tipo === 'debito' || tipo === 'credito_corriente') {
+            // Todos aplican igual; mantenemos todas las opciones
+            ['guayaquil_amex','guayaquil_mv','pacificard_mv','diners_discover','pichincha_mv']
+                .forEach(k => opcionesDisponibles.add(k));
+        } else {
+            Object.keys(tarifas[tipo]).forEach(k => opcionesDisponibles.add(k));
+        }
+        [...selBanco.options].forEach(opt => { opt.disabled = !opcionesDisponibles.has(opt.value); });
+
+        // Meses visibles: 3,6,9,12 siempre; pero si no existe en tabla marcamos con “(N/D)” al calcular.
+    }
+
+    function obtenerTotalActualSeguro() {
+        try {
+            if (typeof obtenerTotalActual === 'function') {
+                const t = obtenerTotalActual();
+                if (!isNaN(t) && isFinite(t)) return t;
+            }
+        } catch (e) {}
+        // Fallback: leer del h2#total
+        const el = document.getElementById('total');
+        if (!el) return 0;
+        const m = (el.textContent||'').match(/\$(\d+(?:\.\d+)?)/);
+        return m ? parseFloat(m[1]) : 0;
+    }
+
+    function calcularYMostrar() {
+        const tipo = selTipo.value;
+        const banco = selBanco.value;
+        const meses = parseInt(selMeses.value,10);
+
+        let porcentaje = null;
+        if (tipo === 'debito' || tipo === 'credito_corriente') {
+            porcentaje = tarifas[tipo].any;
+        } else if (tarifas[tipo] && tarifas[tipo][banco]) {
+            porcentaje = tarifas[tipo][banco][meses] ?? null;
+        }
+
+        const total = obtenerTotalActualSeguro();
+        if (porcentaje == null) {
+            box.querySelector('#rt-porcentaje').textContent = 'N/D';
+            box.querySelector('#rt-recargo').textContent = '—';
+            box.querySelector('#rt-total').textContent = '—';
+            return;
+        }
+        const recargo = total * (porcentaje/100);
+        const totalConTarjeta = total + recargo;
+        box.querySelector('#rt-porcentaje').textContent = porcentaje.toFixed(2) + '%';
+        box.querySelector('#rt-recargo').textContent = '$' + recargo.toFixed(2);
+        box.querySelector('#rt-total').textContent = '$' + totalConTarjeta.toFixed(2);
+    }
+
+    selTipo.addEventListener('change', ()=>{ filtrarBancosPorTipo(); calcularYMostrar(); });
+    selBanco.addEventListener('change', calcularYMostrar);
+    selMeses.addEventListener('change', calcularYMostrar);
+    btnCalc.addEventListener('click', calcularYMostrar);
+
+    filtrarBancosPorTipo();
+}
+</script>
+
 </body>
 </html>
