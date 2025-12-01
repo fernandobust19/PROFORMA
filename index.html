@@ -10,6 +10,21 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+    <script>
+        window.firebaseConfig = window.firebaseConfig || {
+            apiKey: "TU_API_KEY",
+            authDomain: "tu-proyecto.firebaseapp.com",
+            projectId: "tu-project-id",
+            storageBucket: "tu-bucket.appspot.com",
+            messagingSenderId: "000000000000",
+            appId: "1:000000000000:web:xxxxxxxxxxxxxxxx"
+        };
+    </script>
+    <script src="js/cloud-sync.js" defer></script>
         <style>
 /* Tema NEON */
 :root {
@@ -1834,8 +1849,22 @@ function guardarPaginaPersonalizadaDesdeModal() {
         proformas = JSON.parse(localStorage.getItem('proformas_guardadas') || '[]');
     } catch(e) { proformas = []; }
     if (!Array.isArray(proformas)) proformas = [];
-    proformas.push({ name: nombrePagina, savedAt: new Date().toISOString(), html: htmlClonado });
+    const timestampIso = new Date().toISOString();
+    const datosManual = {
+        proformaId: generarProformaId(),
+        name: nombrePagina,
+        savedAt: timestampIso,
+        lastUpdate: new Date().toLocaleString('es-ES'),
+        html: htmlClonado,
+        isAutoSave: false,
+        total: obtenerTotalActual(),
+        nombreCliente,
+        nombreVendedor
+    };
+    proformas.push(datosManual);
     localStorage.setItem('proformas_guardadas', JSON.stringify(proformas));
+
+    sincronizarProformaEnNube(datosManual);
 
     const blob = new Blob([htmlClonado], { type: "text/html" });
     const a = document.createElement("a");
@@ -1844,6 +1873,20 @@ function guardarPaginaPersonalizadaDesdeModal() {
     a.click();
     URL.revokeObjectURL(a.href);
     if (modal) modal.remove();
+}
+
+function sincronizarProformaEnNube(datos) {
+    if (!datos || !window.CloudSync || typeof window.CloudSync.saveProforma !== 'function') {
+        return;
+    }
+    try {
+        const resultado = window.CloudSync.saveProforma(datos);
+        if (resultado && typeof resultado.catch === 'function') {
+            resultado.catch(err => console.warn('Sync nube falló', err));
+        }
+    } catch (error) {
+        console.warn('No fue posible sincronizar en la nube', error);
+    }
 }
 
 window.mostrarModalNombreArchivo = mostrarModalNombreArchivo;
@@ -1980,7 +2023,10 @@ function autoguardarProforma() {
             savedAt: ahora.toISOString(),
             html: htmlClonado,
             isAutoSave: true,
-            lastUpdate: fechaFormateada
+            lastUpdate: fechaFormateada,
+            total: totalActual,
+            nombreCliente,
+            nombreVendedor
         };
         
         if (indiceExistente !== -1) {
@@ -1992,6 +2038,8 @@ function autoguardarProforma() {
         }
         
         localStorage.setItem('proformas_autoguardadas', JSON.stringify(proformasAuto));
+
+        sincronizarProformaEnNube(datosAutoguardado);
         
         // Marcar que esta proforma ya fue autoguardada
         hasAutoSaved = true;
@@ -3051,92 +3099,167 @@ document.addEventListener('DOMContentLoaded', function() {
     const contentContainer = document.createElement('div');
     contentContainer.style.cssText = 'padding:15px 20px;max-height:400px;overflow-y:auto;';
     
-    // Función para mostrar lista de proformas
-    function mostrarListaProformas(tipo) {
-        contentContainer.innerHTML = '';
-        
-        let proformas = [];
+    // Combina proformas locales y remotas
+    function combinarListasDeProformas(locales, remotas) {
+        const mapa = new Map();
+        (locales || []).forEach(item => {
+            if (!item) return;
+            const key = item.proformaId || `${item.name}-${item.savedAt}`;
+            mapa.set(key, { ...item, isRemote: false });
+        });
+        (remotas || []).forEach(item => {
+            if (!item) return;
+            const key = item.proformaId || item.id || `${item.name}-${item.savedAt}`;
+            mapa.set(key, { ...item, isRemote: true });
+        });
+        return Array.from(mapa.values()).sort((a, b) => {
+            const fechaA = a.savedAt ? new Date(a.savedAt).getTime() : 0;
+            const fechaB = b.savedAt ? new Date(b.savedAt).getTime() : 0;
+            return fechaB - fechaA;
+        });
+    }
+
+    // Función para mostrar lista de proformas (local + nube)
+    async function mostrarListaProformas(tipo) {
+        contentContainer.innerHTML = '<div style="padding:20px;color:#666;text-align:center;">Cargando proformas...</div>';
+
         const storageKey = tipo === 'manual' ? 'proformas_guardadas' : 'proformas_autoguardadas';
-        
+        let proformasLocales = [];
         try {
-            proformas = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        } catch(e) { 
-            proformas = []; 
+            proformasLocales = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        } catch (e) {
+            proformasLocales = [];
         }
-        if (!Array.isArray(proformas)) proformas = [];
-        
+        if (!Array.isArray(proformasLocales)) proformasLocales = [];
+
+        let proformasRemotas = [];
+        let errorNube = null;
+        const nubeActiva = Boolean(
+            window.CloudSync &&
+            typeof window.CloudSync.fetchProformas === 'function' &&
+            typeof window.CloudSync.isConfigured === 'function' &&
+            window.CloudSync.isConfigured()
+        );
+        if (nubeActiva) {
+            try {
+                proformasRemotas = await window.CloudSync.fetchProformas(tipo === 'manual' ? 'manual' : 'auto');
+            } catch (err) {
+                errorNube = err;
+            }
+        }
+
+        const proformas = combinarListasDeProformas(proformasLocales, proformasRemotas);
+
         if (proformas.length === 0) {
-            const emptyMsg = tipo === 'manual' 
+            const emptyMsg = tipo === 'manual'
                 ? 'No hay proformas guardadas manualmente.<br>Usa el botón "💾 Guardar Proforma" para crear una.'
                 : 'No hay autoguardados disponibles.<br>Los autoguardados se crean automáticamente al modificar la proforma.';
-            contentContainer.innerHTML = `<div style="padding:20px 6px;color:#888;text-align:center;">${emptyMsg}</div>`;
-        } else {
-            proformas.slice().reverse().forEach((item, idx) => {
-                const row = document.createElement('div');
-                row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:8px;';
-                
-                const info = document.createElement('div');
-                const iconoTipo = tipo === 'manual' ? '💾' : '🔄';
-                info.innerHTML = `
-                    <div style='font-weight:600;display:flex;align-items:center;gap:6px;'>
-                        ${iconoTipo} ${item.name || 'proforma_' + (idx+1)}
-                    </div>
-                    <div style='font-size:11px;color:#666;margin-top:2px;'>
-                        ${item.savedAt ? new Date(item.savedAt).toLocaleString('es-ES') : ''}
-                        ${tipo === 'auto' ? ' (Automático)' : ''}
-                    </div>
-                    ${item.lastUpdate && tipo === 'auto' ? `<div style='font-size:10px;color:#999;'>Última actualización: ${item.lastUpdate}</div>` : ''}
-                `;
-                
-                const buttonsContainer = document.createElement('div');
-                buttonsContainer.style.cssText = 'display:flex;gap:6px;';
-                
-                const openBtn = document.createElement('button');
-                openBtn.textContent = 'Abrir';
-                openBtn.className = 'inventory-action-btn';
-                openBtn.style.cssText = 'background:#14b8ff;color:#fff;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;';
-                openBtn.onclick = function() {
+
+            const configuracionMsg = !nubeActiva ? '<div style="margin-top:10px;color:#999;font-size:11px;">Configura Firebase en <code>window.firebaseConfig</code> para habilitar respaldos en la nube.</div>' : '';
+            contentContainer.innerHTML = `<div style="padding:20px 6px;color:#888;text-align:center;">${emptyMsg}${configuracionMsg}</div>`;
+            return;
+        }
+
+        contentContainer.innerHTML = '';
+        proformas.forEach((item, idx) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:8px;';
+
+            const info = document.createElement('div');
+            const iconoTipo = item.isRemote ? '☁️' : (tipo === 'manual' ? '💾' : '🔄');
+            const etiquetaOrigen = item.isRemote ? 'Respaldo en la nube' : (tipo === 'manual' ? 'Guardado local' : 'Autoguardado local');
+            const fechaMostrada = item.savedAt ? new Date(item.savedAt).toLocaleString('es-ES') : '';
+            const resumenTotal = item.total ? `<span style="color:#102035;font-weight:600;">Total: $${Number(item.total).toFixed(2)}</span>` : '';
+            info.innerHTML = `
+                <div style='font-weight:600;display:flex;align-items:center;gap:6px;'>
+                    ${iconoTipo} ${item.name || 'proforma_' + (idx + 1)}
+                </div>
+                <div style='font-size:11px;color:#666;margin-top:2px;'>
+                    ${fechaMostrada} · ${etiquetaOrigen}
+                </div>
+                ${item.lastUpdate ? `<div style='font-size:10px;color:#999;'>Última actualización: ${item.lastUpdate}</div>` : ''}
+                ${resumenTotal}
+            `;
+
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.style.cssText = 'display:flex;gap:6px;';
+
+            const openBtn = document.createElement('button');
+            openBtn.textContent = 'Abrir';
+            openBtn.className = 'inventory-action-btn';
+            openBtn.style.cssText = 'background:#14b8ff;color:#fff;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;';
+            openBtn.onclick = async function () {
+                openBtn.disabled = true;
+                openBtn.textContent = 'Abriendo...';
+                try {
+                    let htmlContenido = item.html;
+                    if (item.isRemote && (!htmlContenido || typeof htmlContenido !== 'string')) {
+                        if (!window.CloudSync || typeof window.CloudSync.downloadProformaHtml !== 'function') {
+                            throw new Error('La descarga en la nube no está disponible.');
+                        }
+                        htmlContenido = await window.CloudSync.downloadProformaHtml(item);
+                    }
+                    if (!htmlContenido) {
+                        throw new Error('Contenido vacío o no disponible.');
+                    }
                     overlay.remove();
-                    cargarProformaEnPagina(item.html);
-                    // Si se carga una proforma, crear nuevo ID y resetear autoguardado
-                    crearNuevaProforma(); // Esto resetea hasAutoSaved a false
-                };
-                
-                const delBtn = document.createElement('button');
-                delBtn.textContent = 'Eliminar';
-                delBtn.className = 'inventory-action-btn';
-                delBtn.style.cssText = 'background:#ff3864;color:#fff;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;';
-                delBtn.onclick = function() {
-                    const tipoTexto = tipo === 'manual' ? 'guardada manualmente' : 'autoguardada';
-                    if (!confirm(`¿Eliminar esta proforma ${tipoTexto}?`)) return;
-                    
-                    let proformasActuales = [];
-                    try {
-                        proformasActuales = JSON.parse(localStorage.getItem(storageKey) || '[]');
-                    } catch(e) { 
-                        proformasActuales = []; 
-                    }
-                    if (!Array.isArray(proformasActuales)) proformasActuales = [];
-                    
-                    // Buscar por datos únicos para evitar errores
-                    const idxEliminar = proformasActuales.findIndex(p => 
-                        p && p.name === item.name && p.savedAt === item.savedAt
-                    );
-                    if (idxEliminar !== -1) {
-                        proformasActuales.splice(idxEliminar, 1);
-                        localStorage.setItem(storageKey, JSON.stringify(proformasActuales));
-                    }
-                    
-                    // Refrescar la vista actual
-                    mostrarListaProformas(tipo);
-                };
-                
-                buttonsContainer.appendChild(openBtn);
-                buttonsContainer.appendChild(delBtn);
-                row.appendChild(info);
-                row.appendChild(buttonsContainer);
-                contentContainer.appendChild(row);
-            });
+                    cargarProformaEnPagina(htmlContenido);
+                    crearNuevaProforma();
+                } catch (err) {
+                    alert('No se pudo abrir la proforma: ' + err.message);
+                    openBtn.disabled = false;
+                    openBtn.textContent = 'Abrir';
+                }
+            };
+
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Eliminar';
+            delBtn.className = 'inventory-action-btn';
+            delBtn.style.cssText = 'background:#ff3864;color:#fff;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;';
+            delBtn.onclick = async function () {
+                const tipoTexto = item.isRemote ? 'guardada en la nube' : (tipo === 'manual' ? 'guardada manualmente' : 'autoguardada');
+                if (!confirm(`¿Eliminar esta proforma ${tipoTexto}?`)) return;
+
+                if (item.isRemote && window.CloudSync && typeof window.CloudSync.deleteRemoteProforma === 'function') {
+                    await window.CloudSync.deleteRemoteProforma(item);
+                }
+
+                let proformasActuales = [];
+                try {
+                    proformasActuales = JSON.parse(localStorage.getItem(storageKey) || '[]');
+                } catch (e) {
+                    proformasActuales = [];
+                }
+                if (!Array.isArray(proformasActuales)) proformasActuales = [];
+
+                const idxEliminar = proformasActuales.findIndex(p =>
+                    p && (p.proformaId === item.proformaId || (p.name === item.name && p.savedAt === item.savedAt))
+                );
+                if (idxEliminar !== -1) {
+                    proformasActuales.splice(idxEliminar, 1);
+                    localStorage.setItem(storageKey, JSON.stringify(proformasActuales));
+                }
+
+                mostrarListaProformas(tipo);
+            };
+
+            buttonsContainer.appendChild(openBtn);
+            buttonsContainer.appendChild(delBtn);
+            row.appendChild(info);
+            row.appendChild(buttonsContainer);
+            contentContainer.appendChild(row);
+        });
+
+        if (errorNube) {
+            const aviso = document.createElement('div');
+            aviso.style.cssText = 'margin-top:12px;padding:8px 10px;border-radius:6px;background:#fff3cd;color:#664d03;font-size:12px;';
+            aviso.textContent = 'No se pudieron sincronizar las proformas con la nube. Revisa tu conexión o las credenciales de Firebase.';
+            contentContainer.appendChild(aviso);
+        } else if (nubeActiva && proformasRemotas.length > 0) {
+            const infoNube = document.createElement('div');
+            infoNube.style.cssText = 'margin-top:12px;padding:6px 10px;border-radius:6px;background:#e6fffb;color:#046c65;font-size:11px;';
+            infoNube.textContent = 'Mostrando respaldos almacenados en la nube (Firebase).';
+            contentContainer.appendChild(infoNube);
         }
     }
     
