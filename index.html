@@ -510,16 +510,64 @@
     }
 
         .proforma-main-actions-container {
-            display: flex;
-            justify-content: flex-end;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             width: 100%;
             margin-top: 18px;
             margin-bottom: 28px;
-            gap: 12px;
-            align-items: center;
+            gap: 10px;
+            align-items: stretch;
         }
 
-        @media (max-width: 540px) { .proforma-main-actions-container { justify-content: center; } }
+        .glass-action-btn {
+            min-width: 0;
+            width: 100%;
+            justify-content: center;
+            padding: 9px 10px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.55);
+            background: linear-gradient(180deg, rgba(255,255,255,0.52), rgba(160,216,239,0.24));
+            color: #0f2940;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.75),
+                inset 0 -1px 0 rgba(255,255,255,0.2),
+                0 8px 18px rgba(20, 95, 140, 0.14),
+                0 0 0 1px rgba(255,255,255,0.18);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            font-size: 10px;
+            line-height: 1.2;
+            text-align: center;
+            white-space: normal;
+        }
+
+        .glass-action-btn:hover {
+            background: linear-gradient(180deg, rgba(255,255,255,0.68), rgba(103,184,222,0.3));
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.82),
+                inset 0 -1px 0 rgba(255,255,255,0.22),
+                0 10px 22px rgba(20, 95, 140, 0.18),
+                0 0 18px rgba(160,216,239,0.28);
+        }
+
+        .glass-action-btn:active {
+            transform: translateY(1px) scale(0.99);
+            box-shadow:
+                inset 0 2px 6px rgba(0,0,0,0.08),
+                0 4px 12px rgba(20, 95, 140, 0.14);
+        }
+
+        @media (max-width: 640px) {
+            .proforma-main-actions-container {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 420px) {
+            .proforma-main-actions-container {
+                grid-template-columns: 1fr;
+            }
+        }
 
         /* Contenedor principal para dividir proforma e inventario */
         .main-sections-container {
@@ -837,11 +885,11 @@
                             </div>
                             <div class="proforma-main-actions-container">
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
-                                <button class="proforma-action-btn btn-celeste" onclick="abrirSelectorImagenMateriales()">📷 Importar lista por imagen</button>
-                                <button class="proforma-action-btn btn-celeste" id="voice-materials-btn" onclick="iniciarDictadoMateriales()">🎤 Dictar materiales</button>
-                                <button class="proforma-action-btn btn-celeste" onclick="mostrarListaMateriales()">� Ver Todos los Materiales</button>
-                                <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
-                                <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()">📷 Imagen</button>
+                                <button class="proforma-action-btn glass-action-btn" id="voice-materials-btn" onclick="iniciarDictadoMateriales()">🎤 Voz</button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="mostrarListaMateriales()">📋 Materiales</button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()">💾 Guardar</button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()">⬆️ Cargar</button>
                             </div>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
@@ -3262,11 +3310,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function actualizarBotonVozMateriales() {
         const btn = document.getElementById('voice-materials-btn');
         if (!btn) return;
-        btn.textContent = reconocimientoVozActivo ? '🛑 Detener dictado' : '🎤 Dictar materiales';
+        btn.textContent = reconocimientoVozActivo ? '🛑 Detener' : '🎤 Voz';
         btn.style.background = reconocimientoVozActivo
-            ? 'linear-gradient(180deg, #ff8a65 0%, #e53935 100%)'
-            : '';
-        btn.style.color = reconocimientoVozActivo ? '#fff' : '';
+            ? 'linear-gradient(180deg, rgba(255,161,140,0.88), rgba(229,57,53,0.76))'
+            : 'linear-gradient(180deg, rgba(255,255,255,0.52), rgba(160,216,239,0.24))';
+        btn.style.color = reconocimientoVozActivo ? '#fff' : '#0f2940';
     }
 
     function iniciarDictadoMateriales() {
