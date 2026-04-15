@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
         <meta charset="UTF-8">
@@ -2301,6 +2301,48 @@ document.addEventListener('DOMContentLoaded', function() {
         mostrarModalVendedor();
     }
 
+    function dataUrlToBlob(dataUrl) {
+        const parts = dataUrl.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const binary = atob(parts[1]);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: mime });
+    }
+
+    async function compartirImagenEnIOS(dataUrl, fileName) {
+        if (typeof navigator.share !== 'function') return false;
+
+        try {
+            const blob = dataUrlToBlob(dataUrl);
+            const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+            const shareData = { files: [file], title: 'Proforma' };
+
+            if (typeof navigator.canShare === 'function' && !navigator.canShare(shareData)) {
+                return false;
+            }
+
+            await navigator.share(shareData);
+            return true;
+        } catch (error) {
+            if (error && error.name !== 'AbortError') {
+                console.error('Error al compartir imagen en iOS:', error);
+            }
+            return false;
+        }
+    }
+
+    function abrirImagenEnNuevaPestana(dataUrl) {
+        const newTab = window.open();
+        if (!newTab) return false;
+
+        newTab.document.write('<html><head><title>Proforma</title></head><body style="margin:0; background:#f0f0f0; display:flex; flex-direction:column; align-items:center; padding:20px;"><h3 style="color:#333; text-align:center;">Usa Compartir y luego "Guardar en Fotos"</h3><img src="' + dataUrl + '" style="max-width:100%; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.1);" alt="Proforma"></body></html>');
+        return true;
+    }
+
     function guardarComoImagenConVendedor(vendedor) {
         // Obtener el elemento donde se mostrará el nombre del vendedor
         const vendedorDisplay = document.getElementById('nombreVendedorDisplay');
@@ -2341,18 +2383,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Ignorar elementos que puedan tener estilos problemáticos
                     return element.classList && element.classList.contains('ignore-canvas');
                 }
-            }).then((canvas) => {
+            }).then(async (canvas) => {
                 const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+                const fileName = "proforma_" + new Date().toISOString().slice(0,10) + ".jpg";
 
                 // Detectar si es un dispositivo iOS (iPhone, iPad)
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
                 if (isIOS) {
-                    // En iOS, abrir la imagen en una nueva pestaña para que el usuario la guarde manualmente
-                    const newTab = window.open();
-                    if (newTab) {
-                        newTab.document.write('<html><head><title>Proforma</title></head><body style="margin:0;"><img src="' + dataUrl + '" style="width:100%; display:block;" alt="Proforma"></body></html>');
-                    } else {
+                    // En iOS, usar la hoja nativa de compartir para facilitar "Guardar en Fotos"
+                    const shared = await compartirImagenEnIOS(dataUrl, fileName);
+                    if (!shared && !abrirImagenEnNuevaPestana(dataUrl)) {
                         alert('No se pudo abrir una nueva pestaña. Por favor, deshabilita el bloqueador de pop-ups.');
                     }
                 } else {
@@ -2360,17 +2401,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     try {
                         const enlace = document.createElement("a");
                         enlace.href = dataUrl;
-                        enlace.download = "proforma_" + new Date().toISOString().slice(0,10) + ".jpg";
+                        enlace.download = fileName;
                         document.body.appendChild(enlace);
                         enlace.click();
                         document.body.removeChild(enlace);
                     } catch (error) {
                         console.error('Error en descarga directa:', error);
-                        // Fallback: abrir en nueva pestaña como en iOS
-                        const newTab = window.open();
-                        if (newTab) {
-                            newTab.document.write('<html><head><title>Proforma - Clic derecho para guardar</title></head><body style="margin:0; background:#f0f0f0; display:flex; flex-direction:column; align-items:center; padding:20px;"><h3 style="color:#333;">Haz clic derecho en la imagen y selecciona "Guardar imagen como..."</h3><img src="' + dataUrl + '" style="max-width:100%; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.1);" alt="Proforma"></body></html>');
-                        } else {
+                        // Fallback: abrir en nueva pestaña si la descarga falla
+                        if (!abrirImagenEnNuevaPestana(dataUrl)) {
                             alert('No se pudo descargar automáticamente. Habilita las ventanas emergentes e intenta de nuevo.');
                         }
                     }
