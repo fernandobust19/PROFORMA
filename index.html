@@ -9,6 +9,7 @@
     <meta name="theme-color" content="#ffffff">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -835,6 +836,8 @@
                                 <button id="guardarImagenBtn" class="action-button btn-azul" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
                             </div>
                             <div class="proforma-main-actions-container">
+                                <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
+                                <button class="proforma-action-btn btn-celeste" onclick="abrirSelectorImagenMateriales()">📷 Importar lista por imagen</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="mostrarListaMateriales()">� Ver Todos los Materiales</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
@@ -2723,99 +2726,382 @@ document.addEventListener('DOMContentLoaded', function() {
             precioProducto.value = ""; // Limpiar si no hay precio
         }
     }
-    
-    
-    
-    
-    
+
+    function abrirSelectorImagenMateriales() {
+        const input = document.getElementById('ocr-image-input');
+        if (!input) return;
+        input.value = '';
+        input.click();
+    }
+
+    function normalizarTextoMaterial(texto) {
+        return (texto || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function obtenerTokensMaterial(texto) {
+        const stopwords = new Set(['DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'POR', 'PARA', 'CON', 'SIN', 'UND', 'UN', 'UNA', 'UNIDAD', 'UNIDADES']);
+        return normalizarTextoMaterial(texto)
+            .split(' ')
+            .filter(token => token && !stopwords.has(token));
+    }
+
+    function construirCatalogoMateriales() {
+        const options = todosLosProductosOptions.length
+            ? todosLosProductosOptions
+            : Array.from(document.getElementById('producto').options || []);
+
+        return options.map(option => {
+            const partes = option.text.split(' - $');
+            const nombre = (partes[0] || '').trim();
+            const precio = partes[1] ? parseFloat(partes[1]) : NaN;
+            return {
+                nombre: nombre,
+                precio: isNaN(precio) ? 0 : precio,
+                normalizado: normalizarTextoMaterial(nombre),
+                tokens: obtenerTokensMaterial(nombre)
+            };
+        }).filter(item => item.nombre);
+    }
+
+    function calcularDistanciaLevenshtein(a, b) {
+        if (a === b) return 0;
+        if (!a.length) return b.length;
+        if (!b.length) return a.length;
+
+        const matrix = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+        for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+        for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+        for (let i = 1; i <= a.length; i++) {
+            for (let j = 1; j <= b.length; j++) {
+                const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j - 1] + costo
+                );
+            }
+        }
+
+        return matrix[a.length][b.length];
+    }
+
+    function calcularSimilitudMaterial(textoOCR, itemCatalogo) {
+        const consultaNormalizada = normalizarTextoMaterial(textoOCR);
+        const tokensConsulta = obtenerTokensMaterial(textoOCR);
+        if (!consultaNormalizada || !tokensConsulta.length) return 0;
+
+        if (consultaNormalizada === itemCatalogo.normalizado) return 1;
+
+        const interseccion = tokensConsulta.filter(token => itemCatalogo.tokens.includes(token)).length;
+        const coberturaConsulta = interseccion / tokensConsulta.length;
+        const coberturaCatalogo = itemCatalogo.tokens.length ? interseccion / itemCatalogo.tokens.length : 0;
+        const contiene = itemCatalogo.normalizado.includes(consultaNormalizada) || consultaNormalizada.includes(itemCatalogo.normalizado) ? 1 : 0;
+        const distancia = calcularDistanciaLevenshtein(consultaNormalizada, itemCatalogo.normalizado);
+        const similitudTexto = 1 - (distancia / Math.max(consultaNormalizada.length, itemCatalogo.normalizado.length, 1));
+
+        return (coberturaConsulta * 0.45) + (coberturaCatalogo * 0.2) + (contiene * 0.2) + (Math.max(0, similitudTexto) * 0.15);
+    }
+
+    function encontrarMejorCoincidenciaMaterial(textoOCR, catalogo) {
+        let mejor = null;
+        let segundo = null;
+
+        catalogo.forEach(item => {
+            const score = calcularSimilitudMaterial(textoOCR, item);
+            const candidato = { item, score };
+            if (!mejor || score > mejor.score) {
+                segundo = mejor;
+                mejor = candidato;
+            } else if (!segundo || score > segundo.score) {
+                segundo = candidato;
+            }
+        });
+
+        if (!mejor || mejor.score < 0.5) return null;
+        if (segundo && (mejor.score - segundo.score) < 0.08 && mejor.score < 0.78) return null;
+        return mejor;
+    }
+
+    function extraerCantidadYDescripcion(linea) {
+        let texto = (linea || '')
+            .replace(/[|•·*]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!texto) return null;
+
+        const ignorar = /^(TOTAL|SUBTOTAL|IVA|CLIENTE|FECHA|DIRECCION|DIRECCIÓN|SUCURSAL|TELEFONO|TELF|NOTA)\b/i;
+        if (ignorar.test(texto)) return null;
+
+        let cantidad = 1;
+        let descripcion = texto;
+
+        const inicio = texto.match(/^(\d+(?:[.,]\d+)?)\s+(.*)$/);
+        const finalExplicito = texto.match(/^(.*?)(?:\s+[xX]\s*|\s*[=:,-]\s*)(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS)?$/i);
+
+        if (inicio && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(inicio[2])) {
+            cantidad = parseFloat(inicio[1].replace(',', '.'));
+            descripcion = inicio[2].trim();
+        } else if (finalExplicito && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(finalExplicito[1])) {
+            cantidad = parseFloat(finalExplicito[2].replace(',', '.'));
+            descripcion = finalExplicito[1].trim();
+        }
+
+        if (!descripcion || !isFinite(cantidad) || cantidad <= 0) return null;
+        return { cantidad, descripcion, original: texto };
+    }
+
+    function procesarTextoOCRMateriales(textoOCR, catalogo) {
+        const lineas = textoOCR
+            .split(/\n+/)
+            .map(linea => linea.trim())
+            .filter(Boolean);
+
+        const agregados = [];
+        const omitidos = [];
+
+        lineas.forEach(linea => {
+            const extraido = extraerCantidadYDescripcion(linea);
+            if (!extraido) return;
+
+            const match = encontrarMejorCoincidenciaMaterial(extraido.descripcion, catalogo);
+            if (!match) {
+                omitidos.push(`"${extraido.original}"`);
+                return;
+            }
+            if (!isFinite(match.item.precio) || match.item.precio <= 0) {
+                omitidos.push(`"${extraido.original}" (sin precio en la base)`);
+                return;
+            }
+
+            agregados.push({
+                nombre: match.item.nombre,
+                precio: match.item.precio,
+                cantidad: extraido.cantidad,
+                score: match.score,
+                origen: extraido.original
+            });
+        });
+
+        return { agregados, omitidos };
+    }
+
+    function consolidarMaterialesReconocidos(items) {
+        const mapa = new Map();
+        items.forEach(item => {
+            const existente = mapa.get(item.nombre);
+            if (existente) {
+                existente.cantidad += item.cantidad;
+                existente.origenes.push(item.origen);
+            } else {
+                mapa.set(item.nombre, {
+                    nombre: item.nombre,
+                    precio: item.precio,
+                    cantidad: item.cantidad,
+                    origenes: [item.origen]
+                });
+            }
+        });
+        return Array.from(mapa.values());
+    }
+
+    function mostrarOverlayOCR(titulo, detalle) {
+        let overlay = document.getElementById('ocr-processing-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'ocr-processing-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:13000;display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:18px 16px;box-shadow:0 12px 32px rgba(0,0,0,.25);text-align:center;"><div id="ocr-overlay-title" style="font-weight:800;font-size:18px;color:#102035;"></div><div id="ocr-overlay-detail" style="margin-top:10px;font-size:14px;color:#5b6b7c;line-height:1.5;"></div></div>';
+            document.body.appendChild(overlay);
+        }
+        document.getElementById('ocr-overlay-title').textContent = titulo || 'Procesando imagen';
+        document.getElementById('ocr-overlay-detail').textContent = detalle || 'Leyendo la lista de materiales...';
+    }
+
+    function cerrarOverlayOCR() {
+        const overlay = document.getElementById('ocr-processing-overlay');
+        if (overlay) overlay.remove();
+    }
+
+    function mostrarResumenImportacionOCR(resultado) {
+        const agregadosTexto = resultado.agregados.length
+            ? resultado.agregados.map(item => `• ${item.nombre} x ${item.cantidad}`).join('\n')
+            : '• No se agregó ningún material';
+
+        const omitidosTexto = resultado.omitidos.length
+            ? resultado.omitidos.map(item => `• ${item}`).join('\n')
+            : '• No hubo líneas omitidas';
+
+        alert(
+            'Importación de materiales terminada.\n\n' +
+            `Agregados (${resultado.agregados.length}):\n${agregadosTexto}\n\n` +
+            `Omitidos (${resultado.omitidos.length}):\n${omitidosTexto}\n\n` +
+            'Nota: solo se agregaron materiales con coincidencia suficientemente clara en la base de datos.'
+        );
+    }
+
+    async function procesarImagenListaMateriales(event) {
+        const file = event && event.target && event.target.files ? event.target.files[0] : null;
+        if (!file) return;
+
+        if (typeof Tesseract === 'undefined') {
+            alert('La librería de lectura de imágenes no está disponible. Revisa tu conexión e intenta de nuevo.');
+            return;
+        }
+
+        const catalogo = construirCatalogoMateriales();
+        if (!catalogo.length) {
+            alert('No hay materiales cargados en la base de datos para comparar la imagen.');
+            return;
+        }
+
+        mostrarOverlayOCR('Procesando imagen', 'Preparando lectura OCR...');
+
+        try {
+            const resultadoOCR = await Tesseract.recognize(file, 'spa+eng', {
+                logger: mensaje => {
+                    if (!mensaje || !mensaje.status) return;
+                    const progreso = typeof mensaje.progress === 'number' ? ` (${Math.round(mensaje.progress * 100)}%)` : '';
+                    mostrarOverlayOCR('Procesando imagen', `${mensaje.status}${progreso}`);
+                }
+            });
+
+            const textoOCR = resultadoOCR && resultadoOCR.data ? resultadoOCR.data.text : '';
+            if (!textoOCR || !textoOCR.trim()) {
+                throw new Error('No se pudo leer texto útil en la imagen.');
+            }
+
+            const procesado = procesarTextoOCRMateriales(textoOCR, catalogo);
+            const agregadosConsolidados = consolidarMaterialesReconocidos(procesado.agregados);
+
+            agregadosConsolidados.forEach(item => {
+                agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad);
+            });
+
+            cerrarOverlayOCR();
+            mostrarResumenImportacionOCR({
+                agregados: agregadosConsolidados,
+                omitidos: procesado.omitidos
+            });
+        } catch (error) {
+            cerrarOverlayOCR();
+            console.error('Error al procesar imagen de materiales:', error);
+            alert('No se pudo procesar la imagen.\n\n' + error.message);
+        } finally {
+            if (event && event.target) {
+                event.target.value = '';
+            }
+        }
+    }
+
+    function agregarProductoDesdeDatos(nombreProducto, precio, cantidad) {
+        if (!nombreProducto || !isFinite(precio) || !isFinite(cantidad) || cantidad <= 0) {
+            return false;
+        }
+
+        const table = document.querySelector("table");
+        const cantidadNormalizada = Math.round(cantidad * 100) / 100;
+        const filaExistente = Array.from(table.rows).slice(1).find(row => row.cells[0] && row.cells[0].textContent.trim() === nombreProducto);
+
+        if (filaExistente) {
+            const cantidadActual = parseFloat(filaExistente.cells[1].textContent) || 0;
+            const nuevaCantidad = cantidadActual + cantidadNormalizada;
+            filaExistente.cells[1].innerHTML = nuevaCantidad;
+            filaExistente.cells[2].innerHTML = "$" + precio.toFixed(2);
+            filaExistente.cells[3].innerHTML = "$" + (precio * nuevaCantidad).toFixed(2);
+            filaExistente.cells[0].title = nombreProducto;
+            filaExistente.cells[0].onclick = function() { editarCelda(this, 'nombre', nombreProducto); };
+            filaExistente.cells[1].onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
+            filaExistente.cells[2].onclick = function() { editarCelda(this, 'precio', nombreProducto); };
+            productos[nombreProducto] = { precio: precio, cantidad: nuevaCantidad };
+            calcularTotal();
+            autoguardarProforma();
+            return true;
+        }
+
+        var subtotal = precio * cantidadNormalizada;
+        productos[nombreProducto] = { precio: precio, cantidad: cantidadNormalizada };
+        var newRow = table.insertRow(table.rows.length);
+        var cell1 = newRow.insertCell(0);
+        var cell2 = newRow.insertCell(1);
+        var cell3 = newRow.insertCell(2);
+        var cell4 = newRow.insertCell(3);
+        var cell5 = newRow.insertCell(4);
+
+        cell1.innerHTML = nombreProducto;
+        cell1.className = 'editable-cell';
+        cell1.title = nombreProducto;
+        cell1.dataset.originalName = nombreProducto;
+        cell1.dataset.price = precio;
+        cell1.dataset.qty = cantidadNormalizada;
+
+        cell2.innerHTML = cantidadNormalizada;
+        cell2.className = 'editable-cell';
+        cell2.dataset.originalName = nombreProducto;
+
+        cell3.innerHTML = "$" + precio.toFixed(2);
+        cell3.className = 'editable-cell';
+        cell3.dataset.originalName = nombreProducto;
+
+        cell4.innerHTML = "$" + subtotal.toFixed(2);
+
+        cell1.onclick = function() { editarCelda(this, 'nombre', nombreProducto); };
+        cell2.onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
+        cell3.onclick = function() { editarCelda(this, 'precio', nombreProducto); };
+
+        var deleteButton = document.createElement("button");
+        deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:10px;color:#fff;"></i>';
+        deleteButton.className = "delete-row-btn";
+        deleteButton.style.cssText = `
+            background: #ff3864;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
+        `;
+        deleteButton.title = "Eliminar producto";
+
+        deleteButton.onmouseenter = function() {
+            this.style.background = '#e63946';
+            this.style.transform = 'scale(1.05)';
+        };
+        deleteButton.onmouseleave = function() {
+            this.style.background = '#ff3864';
+            this.style.transform = 'scale(1)';
+        };
+
+        deleteButton.onclick = function() {
+            if (confirm('¿Eliminar este producto?')) {
+                delete productos[nombreProducto];
+                var currentRow = this.closest('tr');
+                currentRow.parentNode.removeChild(currentRow);
+                calcularTotal();
+                autoguardarProforma();
+            }
+        };
+
+        cell5.appendChild(deleteButton);
+
+        calcularTotal();
+        autoguardarProforma();
+        return true;
+    }
 
     function agregarProducto() {
         var nombreProducto = document.getElementById("nombreProducto").value;
         var precio = parseFloat(document.getElementById("precioProducto").value);
-        var cantidad = parseInt(document.getElementById("cantidad").value);
+        var cantidad = parseInt(document.getElementById("cantidad").value, 10);
 
-        if (nombreProducto && !isNaN(precio) && !isNaN(cantidad)) {
-            var subtotal = precio * cantidad;
-            productos[nombreProducto] = { precio: precio, cantidad: cantidad };
-            var table = document.querySelector("table");
-            var newRow = table.insertRow(table.rows.length);
-            var cell1 = newRow.insertCell(0);
-            var cell2 = newRow.insertCell(1);
-            var cell3 = newRow.insertCell(2);
-            var cell4 = newRow.insertCell(3);
-            var cell5 = newRow.insertCell(4);
-
-            // Configurar celdas con contenido
-            cell1.innerHTML = nombreProducto;
-            cell1.className = 'editable-cell';
-            cell1.title = nombreProducto; // Tooltip para ver texto completo
-            cell1.dataset.originalName = nombreProducto;
-            cell1.dataset.price = precio;
-            cell1.dataset.qty = cantidad;
-            
-            cell2.innerHTML = cantidad;
-            cell2.className = 'editable-cell';
-            cell2.dataset.originalName = nombreProducto;
-            
-            cell3.innerHTML = "$" + precio.toFixed(2);
-            cell3.className = 'editable-cell';
-            cell3.dataset.originalName = nombreProducto;
-            
-            cell4.innerHTML = "$" + subtotal.toFixed(2);
-
-            // Hacer celdas editables al hacer clic
-            cell1.onclick = function() { editarCelda(this, 'nombre', nombreProducto); };
-            cell2.onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
-            cell3.onclick = function() { editarCelda(this, 'precio', nombreProducto); };
-            
-            // Botón basurero rojo para eliminar
-            var deleteButton = document.createElement("button");
-            deleteButton.innerHTML = '<i class="fas fa-trash-alt" style="font-size:10px;color:#fff;"></i>';
-            deleteButton.className = "delete-row-btn";
-            deleteButton.style.cssText = `
-                background: #ff3864;
-                border: none;
-                border-radius: 3px;
-                padding: 4px 6px;
-                cursor: pointer;
-                transition: all 0.2s;
-                box-shadow: 0 2px 4px rgba(255, 56, 100, 0.3);
-            `;
-            deleteButton.title = "Eliminar producto";
-            
-            // Efecto hover
-            deleteButton.onmouseenter = function() {
-                this.style.background = '#e63946';
-                this.style.transform = 'scale(1.05)';
-            };
-            deleteButton.onmouseleave = function() {
-                this.style.background = '#ff3864';
-                this.style.transform = 'scale(1)';
-            };
-            
-            deleteButton.onclick = function() {
-                if (confirm('¿Eliminar este producto?')) {
-                    delete productos[nombreProducto];
-                    // Encontrar la fila actual basándose en el botón que se hizo clic
-                    var currentRow = this.closest('tr');
-                    currentRow.parentNode.removeChild(currentRow);
-                    calcularTotal();
-                    autoguardarProforma();
-                }
-            };
-            
-            cell5.appendChild(deleteButton);
-
-            calcularTotal();
-            
-            // Activar autoguardado cuando se agrega un producto
-            autoguardarProforma();
-
-            // Guardar la selección actual del producto antes de limpiar
-            const selectProducto = document.getElementById("producto");
-            const valorSeleccionado = selectProducto.value;
-
-            // Limpiar campos después de agregar
+        if (agregarProductoDesdeDatos(nombreProducto, precio, cantidad)) {
             document.getElementById("cantidad").value = "1";
         } else {
             alert("Por favor, ingrese un nombre y un precio válido.");
