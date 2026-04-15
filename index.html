@@ -2727,6 +2727,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    const OCR_LEARNING_STORAGE_KEY = 'ocr_material_learning_v2';
+    let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
+
+    function cargarBaseAprendizajeMateriales() {
+        try {
+            const raw = localStorage.getItem(OCR_LEARNING_STORAGE_KEY);
+            if (!raw) return { aliases: {} };
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' && parsed.aliases ? parsed : { aliases: {} };
+        } catch (error) {
+            console.error('No se pudo cargar la base de aprendizaje OCR:', error);
+            return { aliases: {} };
+        }
+    }
+
+    function guardarBaseAprendizajeMateriales() {
+        try {
+            localStorage.setItem(OCR_LEARNING_STORAGE_KEY, JSON.stringify(baseAprendizajeMateriales));
+        } catch (error) {
+            console.error('No se pudo guardar la base de aprendizaje OCR:', error);
+        }
+    }
+
     function abrirSelectorImagenMateriales() {
         const input = document.getElementById('ocr-image-input');
         if (!input) return;
@@ -2739,9 +2762,64 @@ document.addEventListener('DOMContentLoaded', function() {
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase()
+            .replace(/["']/g, ' PULG ')
+            .replace(/\bPOR\b/g, ' X ')
+            .replace(/\bPULGADAS?\b/g, ' PULG ')
+            .replace(/\bPLG\b/g, ' PULG ')
+            .replace(/\bINCH(?:ES)?\b/g, ' PULG ')
+            .replace(/\bCENTIMETROS?\b/g, ' CM ')
+            .replace(/\bCMS?\b/g, ' CM ')
+            .replace(/\bMILIMETROS?\b/g, ' MM ')
+            .replace(/\bMMS?\b/g, ' MM ')
             .replace(/[^A-Z0-9\s]/g, ' ')
+            .replace(/\bX\b/g, ' X ')
             .replace(/\s+/g, ' ')
             .trim();
+    }
+
+    function generarVariantesDimension(textoNormalizado) {
+        const variantes = new Set([textoNormalizado]);
+        const matches = [...textoNormalizado.matchAll(/\b(\d{1,3})\s+X\s+(\d{1,3})\b/g)];
+
+        matches.forEach(match => {
+            const a = parseInt(match[1], 10);
+            const b = parseInt(match[2], 10);
+            if (!isFinite(a) || !isFinite(b)) return;
+
+            if (a <= 20 && b <= 20) {
+                variantes.add(textoNormalizado.replace(match[0], `${a * 10} X ${b * 10}`));
+            }
+            if (a >= 100 && b >= 100 && a % 10 === 0 && b % 10 === 0) {
+                variantes.add(textoNormalizado.replace(match[0], `${a / 10} X ${b / 10}`));
+            }
+        });
+
+        if (/\bCM\b/.test(textoNormalizado)) {
+            matches.forEach(match => {
+                const a = parseInt(match[1], 10);
+                const b = parseInt(match[2], 10);
+                if (!isFinite(a) || !isFinite(b)) return;
+                variantes.add(
+                    textoNormalizado
+                        .replace(match[0], `${a * 10} X ${b * 10}`)
+                        .replace(/\bCM\b/g, 'MM')
+                );
+            });
+        }
+
+        return Array.from(variantes).map(variant => variant.replace(/\s+/g, ' ').trim());
+    }
+
+    function generarVariantesMaterial(texto, aliases = []) {
+        const base = normalizarTextoMaterial(texto);
+        const variantes = new Set();
+
+        [base, ...aliases.map(alias => normalizarTextoMaterial(alias))].forEach(valor => {
+            if (!valor) return;
+            generarVariantesDimension(valor).forEach(variant => variantes.add(variant));
+        });
+
+        return Array.from(variantes);
     }
 
     function obtenerTokensMaterial(texto) {
@@ -2749,6 +2827,50 @@ document.addEventListener('DOMContentLoaded', function() {
         return normalizarTextoMaterial(texto)
             .split(' ')
             .filter(token => token && !stopwords.has(token));
+    }
+
+    function obtenerAliasesAprendidosParaNombre(nombreCanonico) {
+        const objetivo = normalizarTextoMaterial(nombreCanonico);
+        return Object.values(baseAprendizajeMateriales.aliases || {})
+            .filter(item => item && normalizarTextoMaterial(item.nombreCanonico) === objetivo)
+            .map(item => item.aliasOriginal)
+            .filter(Boolean);
+    }
+
+    function registrarAprendizajeMaterial(aliasTexto, nombreCanonico, fuente) {
+        const aliasNormalizado = normalizarTextoMaterial(aliasTexto);
+        const canonicoNormalizado = normalizarTextoMaterial(nombreCanonico);
+        if (!aliasNormalizado || !canonicoNormalizado) return;
+        if (aliasNormalizado.length < 3 || aliasNormalizado === canonicoNormalizado) return;
+
+        baseAprendizajeMateriales.aliases[aliasNormalizado] = {
+            aliasOriginal: aliasTexto.trim(),
+            nombreCanonico: nombreCanonico.trim(),
+            fuente: fuente || 'manual',
+            usos: ((baseAprendizajeMateriales.aliases[aliasNormalizado] || {}).usos || 0) + 1,
+            updatedAt: new Date().toISOString()
+        };
+        guardarBaseAprendizajeMateriales();
+    }
+
+    function buscarAliasAprendido(textoOCR, catalogo) {
+        const variantesConsulta = generarVariantesMaterial(textoOCR);
+        for (const variante of variantesConsulta) {
+            const aprendido = baseAprendizajeMateriales.aliases[variante];
+            if (!aprendido) continue;
+            const item = catalogo.find(entry => normalizarTextoMaterial(entry.nombre) === normalizarTextoMaterial(aprendido.nombreCanonico));
+            if (item) {
+                return { item, score: 0.99, aprendido: true };
+            }
+        }
+        return null;
+    }
+
+    function inferirNombreCanonico(nombreTexto, catalogo) {
+        const exacto = catalogo.find(item => normalizarTextoMaterial(item.nombre) === normalizarTextoMaterial(nombreTexto));
+        if (exacto) return exacto.nombre;
+        const mejor = encontrarMejorCoincidenciaMaterial(nombreTexto, catalogo);
+        return mejor && mejor.score >= 0.84 ? mejor.item.nombre : null;
     }
 
     function construirCatalogoMateriales() {
@@ -2764,7 +2886,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 nombre: nombre,
                 precio: isNaN(precio) ? 0 : precio,
                 normalizado: normalizarTextoMaterial(nombre),
-                tokens: obtenerTokensMaterial(nombre)
+                tokens: obtenerTokensMaterial(nombre),
+                aliasesAprendidos: obtenerAliasesAprendidosParaNombre(nombre),
+                variantes: generarVariantesMaterial(nombre, obtenerAliasesAprendidosParaNombre(nombre))
             };
         }).filter(item => item.nombre);
     }
@@ -2793,23 +2917,39 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function calcularSimilitudMaterial(textoOCR, itemCatalogo) {
-        const consultaNormalizada = normalizarTextoMaterial(textoOCR);
+        const variantesConsulta = generarVariantesMaterial(textoOCR);
         const tokensConsulta = obtenerTokensMaterial(textoOCR);
-        if (!consultaNormalizada || !tokensConsulta.length) return 0;
+        if (!variantesConsulta.length || !tokensConsulta.length) return 0;
 
-        if (consultaNormalizada === itemCatalogo.normalizado) return 1;
+        let mejorScore = 0;
 
-        const interseccion = tokensConsulta.filter(token => itemCatalogo.tokens.includes(token)).length;
-        const coberturaConsulta = interseccion / tokensConsulta.length;
-        const coberturaCatalogo = itemCatalogo.tokens.length ? interseccion / itemCatalogo.tokens.length : 0;
-        const contiene = itemCatalogo.normalizado.includes(consultaNormalizada) || consultaNormalizada.includes(itemCatalogo.normalizado) ? 1 : 0;
-        const distancia = calcularDistanciaLevenshtein(consultaNormalizada, itemCatalogo.normalizado);
-        const similitudTexto = 1 - (distancia / Math.max(consultaNormalizada.length, itemCatalogo.normalizado.length, 1));
+        variantesConsulta.forEach(consultaNormalizada => {
+            if (!consultaNormalizada) return;
+            if ((itemCatalogo.variantes || [itemCatalogo.normalizado]).includes(consultaNormalizada)) {
+                mejorScore = Math.max(mejorScore, 1);
+                return;
+            }
 
-        return (coberturaConsulta * 0.45) + (coberturaCatalogo * 0.2) + (contiene * 0.2) + (Math.max(0, similitudTexto) * 0.15);
+            (itemCatalogo.variantes || [itemCatalogo.normalizado]).forEach(varianteCatalogo => {
+                const interseccion = tokensConsulta.filter(token => obtenerTokensMaterial(varianteCatalogo).includes(token)).length;
+                const tokensCatalogo = obtenerTokensMaterial(varianteCatalogo);
+                const coberturaConsulta = interseccion / Math.max(tokensConsulta.length, 1);
+                const coberturaCatalogo = tokensCatalogo.length ? interseccion / tokensCatalogo.length : 0;
+                const contiene = varianteCatalogo.includes(consultaNormalizada) || consultaNormalizada.includes(varianteCatalogo) ? 1 : 0;
+                const distancia = calcularDistanciaLevenshtein(consultaNormalizada, varianteCatalogo);
+                const similitudTexto = 1 - (distancia / Math.max(consultaNormalizada.length, varianteCatalogo.length, 1));
+                const score = (coberturaConsulta * 0.45) + (coberturaCatalogo * 0.2) + (contiene * 0.2) + (Math.max(0, similitudTexto) * 0.15);
+                mejorScore = Math.max(mejorScore, score);
+            });
+        });
+
+        return mejorScore;
     }
 
     function encontrarMejorCoincidenciaMaterial(textoOCR, catalogo) {
+        const aliasAprendido = buscarAliasAprendido(textoOCR, catalogo);
+        if (aliasAprendido) return aliasAprendido;
+
         let mejor = null;
         let segundo = null;
 
@@ -2879,6 +3019,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!isFinite(match.item.precio) || match.item.precio <= 0) {
                 omitidos.push(`"${extraido.original}" (sin precio en la base)`);
                 return;
+            }
+
+            if (match.score >= 0.9 || match.aprendido) {
+                registrarAprendizajeMaterial(extraido.descripcion, match.item.nombre, match.aprendido ? 'alias_guardado' : 'ocr_alta_confianza');
             }
 
             agregados.push({
@@ -2982,7 +3126,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const agregadosConsolidados = consolidarMaterialesReconocidos(procesado.agregados);
 
             agregadosConsolidados.forEach(item => {
-                agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad);
+                agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, item.origenes[0] || '');
             });
 
             cerrarOverlayOCR();
@@ -3001,7 +3145,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function agregarProductoDesdeDatos(nombreProducto, precio, cantidad) {
+    function agregarProductoDesdeDatos(nombreProducto, precio, cantidad, textoOrigen) {
         if (!nombreProducto || !isFinite(precio) || !isFinite(cantidad) || cantidad <= 0) {
             return false;
         }
@@ -3013,6 +3157,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (filaExistente) {
             const cantidadActual = parseFloat(filaExistente.cells[1].textContent) || 0;
             const nuevaCantidad = cantidadActual + cantidadNormalizada;
+            if (textoOrigen) {
+                filaExistente.dataset.learnSource = filaExistente.dataset.learnSource || textoOrigen;
+            }
             filaExistente.cells[1].innerHTML = nuevaCantidad;
             filaExistente.cells[2].innerHTML = "$" + precio.toFixed(2);
             filaExistente.cells[3].innerHTML = "$" + (precio * nuevaCantidad).toFixed(2);
@@ -3029,6 +3176,9 @@ document.addEventListener('DOMContentLoaded', function() {
         var subtotal = precio * cantidadNormalizada;
         productos[nombreProducto] = { precio: precio, cantidad: cantidadNormalizada };
         var newRow = table.insertRow(table.rows.length);
+        if (textoOrigen) {
+            newRow.dataset.learnSource = textoOrigen;
+        }
         var cell1 = newRow.insertCell(0);
         var cell2 = newRow.insertCell(1);
         var cell3 = newRow.insertCell(2);
@@ -3100,8 +3250,13 @@ document.addEventListener('DOMContentLoaded', function() {
         var nombreProducto = document.getElementById("nombreProducto").value;
         var precio = parseFloat(document.getElementById("precioProducto").value);
         var cantidad = parseInt(document.getElementById("cantidad").value, 10);
+        const catalogo = construirCatalogoMateriales();
+        const canonico = inferirNombreCanonico(nombreProducto, catalogo);
+        if (canonico && normalizarTextoMaterial(canonico) !== normalizarTextoMaterial(nombreProducto)) {
+            registrarAprendizajeMaterial(nombreProducto, canonico, 'agregado_manual');
+        }
 
-        if (agregarProductoDesdeDatos(nombreProducto, precio, cantidad)) {
+        if (agregarProductoDesdeDatos(nombreProducto, precio, cantidad, '')) {
             document.getElementById("cantidad").value = "1";
         } else {
             alert("Por favor, ingrese un nombre y un precio válido.");
@@ -3166,6 +3321,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 nombre = nuevoValor;
                 celda.textContent = nuevoValor;
                 celda.title = nuevoValor;
+                const catalogo = construirCatalogoMateriales();
+                const canonico = inferirNombreCanonico(nuevoValor, catalogo);
+                const origenAprendizaje = row.dataset.learnSource || nombreOriginal;
+                if (canonico) {
+                    registrarAprendizajeMaterial(origenAprendizaje, canonico, 'correccion_manual');
+                    if (nombreOriginal !== canonico) {
+                        registrarAprendizajeMaterial(nombreOriginal, canonico, 'correccion_manual');
+                    }
+                }
             } else if (tipo === 'cantidad') {
                 cantidad = parseInt(nuevoValor);
                 celda.textContent = cantidad;
@@ -3238,6 +3402,16 @@ document.addEventListener('DOMContentLoaded', function() {
         var precio = parseFloat(row.cells[2].querySelector('input').value);
 
         if (nombreProducto && !isNaN(cantidad) && !isNaN(precio)) {
+            const catalogo = construirCatalogoMateriales();
+            const canonico = inferirNombreCanonico(nombreProducto, catalogo);
+            const origenAprendizaje = row.dataset.learnSource || nombreOriginal;
+            if (canonico) {
+                registrarAprendizajeMaterial(origenAprendizaje, canonico, 'edicion_producto');
+                if (nombreOriginal !== canonico) {
+                    registrarAprendizajeMaterial(nombreOriginal, canonico, 'edicion_producto');
+                }
+            }
+
             // Actualizar el objeto de productos
             delete productos[nombreOriginal];
             productos[nombreProducto] = { precio: precio, cantidad: cantidad };
