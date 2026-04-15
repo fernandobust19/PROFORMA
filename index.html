@@ -838,6 +838,7 @@
                             <div class="proforma-main-actions-container">
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
                                 <button class="proforma-action-btn btn-celeste" onclick="abrirSelectorImagenMateriales()">📷 Importar lista por imagen</button>
+                                <button class="proforma-action-btn btn-celeste" id="voice-materials-btn" onclick="iniciarDictadoMateriales()">🎤 Dictar materiales</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="mostrarListaMateriales()">� Ver Todos los Materiales</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="mostrarModalNombreArchivo()">💾 Guardar Proforma</button>
                                 <button class="proforma-action-btn btn-celeste" onclick="cargarPagina()">⬆️ Cargar Proforma</button>
@@ -2729,6 +2730,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const OCR_LEARNING_STORAGE_KEY = 'ocr_material_learning_v2';
     let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
+    let reconocimientoVozMateriales = null;
+    let reconocimientoVozActivo = false;
 
     function cargarBaseAprendizajeMateriales() {
         try {
@@ -2829,6 +2832,36 @@ document.addEventListener('DOMContentLoaded', function() {
             .filter(token => token && !stopwords.has(token));
     }
 
+    function extraerNumerosMaterial(texto) {
+        return (normalizarTextoMaterial(texto).match(/\d+(?:\.\d+)?/g) || []);
+    }
+
+    function calcularCompatibilidadNumerica(textoOCR, itemCatalogo) {
+        const numerosConsulta = extraerNumerosMaterial(textoOCR);
+        const numerosCatalogo = extraerNumerosMaterial(itemCatalogo.nombre);
+
+        if (!numerosConsulta.length && !numerosCatalogo.length) {
+            return { score: 1, mismatchFuerte: false };
+        }
+        if (numerosConsulta.length && !numerosCatalogo.length) {
+            return { score: 0.35, mismatchFuerte: false };
+        }
+        if (!numerosConsulta.length && numerosCatalogo.length) {
+            return { score: 0.82, mismatchFuerte: false };
+        }
+
+        let coincidencias = 0;
+        numerosConsulta.forEach(numero => {
+            if (numerosCatalogo.includes(numero)) coincidencias += 1;
+        });
+
+        const coberturaConsulta = coincidencias / numerosConsulta.length;
+        const coberturaCatalogo = coincidencias / numerosCatalogo.length;
+        const score = (coberturaConsulta * 0.65) + (coberturaCatalogo * 0.35);
+        const mismatchFuerte = coincidencias === 0 && numerosConsulta.length > 0 && numerosCatalogo.length > 0;
+        return { score, mismatchFuerte };
+    }
+
     function obtenerAliasesAprendidosParaNombre(nombreCanonico) {
         const objetivo = normalizarTextoMaterial(nombreCanonico);
         return Object.values(baseAprendizajeMateriales.aliases || {})
@@ -2920,6 +2953,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const variantesConsulta = generarVariantesMaterial(textoOCR);
         const tokensConsulta = obtenerTokensMaterial(textoOCR);
         if (!variantesConsulta.length || !tokensConsulta.length) return 0;
+        const compatibilidadNumerica = calcularCompatibilidadNumerica(textoOCR, itemCatalogo);
+        if (compatibilidadNumerica.mismatchFuerte) return 0;
 
         let mejorScore = 0;
 
@@ -2938,7 +2973,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const contiene = varianteCatalogo.includes(consultaNormalizada) || consultaNormalizada.includes(varianteCatalogo) ? 1 : 0;
                 const distancia = calcularDistanciaLevenshtein(consultaNormalizada, varianteCatalogo);
                 const similitudTexto = 1 - (distancia / Math.max(consultaNormalizada.length, varianteCatalogo.length, 1));
-                const score = (coberturaConsulta * 0.45) + (coberturaCatalogo * 0.2) + (contiene * 0.2) + (Math.max(0, similitudTexto) * 0.15);
+                const scoreBase = (coberturaConsulta * 0.38) + (coberturaCatalogo * 0.17) + (contiene * 0.15) + (Math.max(0, similitudTexto) * 0.1);
+                const score = scoreBase + (compatibilidadNumerica.score * 0.2);
                 mejorScore = Math.max(mejorScore, score);
             });
         });
@@ -2949,6 +2985,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function calcularCoincidenciaParcialPorTokens(textoOCR, itemCatalogo) {
         const tokensConsulta = obtenerTokensMaterial(textoOCR).filter(token => token.length >= 2);
         if (!tokensConsulta.length) return 0;
+        const compatibilidadNumerica = calcularCompatibilidadNumerica(textoOCR, itemCatalogo);
+        if (compatibilidadNumerica.mismatchFuerte) return 0;
 
         let mejor = 0;
         const variantesCatalogo = itemCatalogo.variantes || [itemCatalogo.normalizado];
@@ -2978,8 +3016,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             const cobertura = puntos / tokensConsulta.length;
-            const bonusMedidas = /\d/.test(normalizarTextoMaterial(textoOCR)) && /\d/.test(varianteCatalogo) ? 0.06 : 0;
-            mejor = Math.max(mejor, Math.min(1, cobertura + bonusMedidas));
+            const bonusMedidas = /\d/.test(normalizarTextoMaterial(textoOCR)) && /\d/.test(varianteCatalogo) ? 0.04 : 0;
+            const score = Math.min(1, (cobertura * 0.72) + (compatibilidadNumerica.score * 0.24) + bonusMedidas);
+            mejor = Math.max(mejor, score);
         });
 
         return mejor;
@@ -3017,11 +3056,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        if (!mejor || mejor.score < 0.42) {
+        if (!mejor || mejor.score < 0.5) {
             return buscarCoincidenciaFlexibleMaterial(textoOCR, catalogo);
         }
 
-        if (segundo && (mejor.score - segundo.score) < 0.04 && mejor.score < 0.68) {
+        if (segundo && (mejor.score - segundo.score) < 0.07 && mejor.score < 0.78) {
             return buscarCoincidenciaFlexibleMaterial(textoOCR, catalogo) || null;
         }
 
@@ -3156,6 +3195,26 @@ document.addEventListener('DOMContentLoaded', function() {
         );
     }
 
+    async function procesarTextoListaMateriales(textoFuente, origen) {
+        const catalogo = construirCatalogoMateriales();
+        if (!catalogo.length) {
+            alert('No hay materiales cargados en la base de datos para comparar la lista.');
+            return;
+        }
+
+        const procesado = procesarTextoOCRMateriales(textoFuente, catalogo);
+        const agregadosConsolidados = consolidarMaterialesReconocidos(procesado.agregados);
+
+        agregadosConsolidados.forEach(item => {
+            agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, item.origenes[0] || origen || '');
+        });
+
+        mostrarResumenImportacionOCR({
+            agregados: agregadosConsolidados,
+            omitidos: procesado.omitidos
+        });
+    }
+
     async function procesarImagenListaMateriales(event) {
         const file = event && event.target && event.target.files ? event.target.files[0] : null;
         if (!file) return;
@@ -3187,18 +3246,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('No se pudo leer texto útil en la imagen.');
             }
 
-            const procesado = procesarTextoOCRMateriales(textoOCR, catalogo);
-            const agregadosConsolidados = consolidarMaterialesReconocidos(procesado.agregados);
-
-            agregadosConsolidados.forEach(item => {
-                agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, item.origenes[0] || '');
-            });
-
             cerrarOverlayOCR();
-            mostrarResumenImportacionOCR({
-                agregados: agregadosConsolidados,
-                omitidos: procesado.omitidos
-            });
+            await procesarTextoListaMateriales(textoOCR, 'imagen');
         } catch (error) {
             cerrarOverlayOCR();
             console.error('Error al procesar imagen de materiales:', error);
@@ -3208,6 +3257,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 event.target.value = '';
             }
         }
+    }
+
+    function actualizarBotonVozMateriales() {
+        const btn = document.getElementById('voice-materials-btn');
+        if (!btn) return;
+        btn.textContent = reconocimientoVozActivo ? '🛑 Detener dictado' : '🎤 Dictar materiales';
+        btn.style.background = reconocimientoVozActivo
+            ? 'linear-gradient(180deg, #ff8a65 0%, #e53935 100%)'
+            : '';
+        btn.style.color = reconocimientoVozActivo ? '#fff' : '';
+    }
+
+    function iniciarDictadoMateriales() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert('El reconocimiento por voz no está disponible en este navegador.');
+            return;
+        }
+
+        if (reconocimientoVozActivo && reconocimientoVozMateriales) {
+            reconocimientoVozMateriales.stop();
+            return;
+        }
+
+        reconocimientoVozMateriales = new SpeechRecognition();
+        reconocimientoVozMateriales.lang = 'es-EC';
+        reconocimientoVozMateriales.interimResults = false;
+        reconocimientoVozMateriales.continuous = false;
+        reconocimientoVozMateriales.maxAlternatives = 1;
+
+        reconocimientoVozMateriales.onstart = function() {
+            reconocimientoVozActivo = true;
+            actualizarBotonVozMateriales();
+            mostrarOverlayOCR('Escuchando materiales', 'Dicta la lista de productos y cantidades en voz alta.');
+        };
+
+        reconocimientoVozMateriales.onresult = async function(event) {
+            const transcript = Array.from(event.results || [])
+                .map(result => result[0] && result[0].transcript ? result[0].transcript : '')
+                .join('\n')
+                .trim();
+
+            cerrarOverlayOCR();
+            if (!transcript) {
+                alert('No se entendió el dictado. Intenta hablar más claro o más despacio.');
+                return;
+            }
+
+            await procesarTextoListaMateriales(transcript, 'voz');
+        };
+
+        reconocimientoVozMateriales.onerror = function(event) {
+            cerrarOverlayOCR();
+            console.error('Error en reconocimiento por voz:', event);
+            alert('No se pudo procesar el dictado por voz. ' + (event.error || ''));
+        };
+
+        reconocimientoVozMateriales.onend = function() {
+            reconocimientoVozActivo = false;
+            actualizarBotonVozMateriales();
+            cerrarOverlayOCR();
+        };
+
+        reconocimientoVozMateriales.start();
     }
 
     function agregarProductoDesdeDatos(nombreProducto, precio, cantidad, textoOrigen) {
