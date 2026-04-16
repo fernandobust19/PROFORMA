@@ -3135,11 +3135,69 @@ document.addEventListener('DOMContentLoaded', function() {
         return mejor;
     }
 
-    function extraerCantidadYDescripcion(linea) {
-        let texto = (linea || '')
+    function limpiarLineaProformaOCR(linea) {
+        return (linea || '')
             .replace(/[|•·*]/g, ' ')
+            .replace(/\$\s*\d+(?:[.,]\d+)?/g, ' ')
+            .replace(/\b\d+(?:[.,]\d+)?\s*%\b/g, ' ')
+            .replace(/\bTOTAL\b.*$/i, ' ')
+            .replace(/\bSUBTOTAL\b.*$/i, ' ')
+            .replace(/\bIVA\b.*$/i, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+    }
+
+    function buscarCoincidenciaExactaEnLinea(linea, catalogo) {
+        const limpia = limpiarLineaProformaOCR(linea);
+        const normalizada = normalizarTextoMaterial(limpia);
+        if (!normalizada) return null;
+
+        let mejor = null;
+
+        catalogo.forEach(item => {
+            const variantes = item.variantes || [item.normalizado];
+            variantes.forEach(variante => {
+                if (!variante) return;
+                if (normalizada === variante) {
+                    mejor = { item, score: 1, exacta: true };
+                    return;
+                }
+                if (normalizada.includes(variante) || variante.includes(normalizada)) {
+                    const proporcion = Math.min(normalizada.length, variante.length) / Math.max(normalizada.length, variante.length);
+                    if (proporcion >= 0.72) {
+                        const score = 0.9 + (proporcion * 0.08);
+                        if (!mejor || score > mejor.score) {
+                            mejor = { item, score, exacta: true };
+                        }
+                    }
+                }
+            });
+        });
+
+        return mejor;
+    }
+
+    function extraerCantidadDesdeLinea(linea, itemCatalogo) {
+        const texto = limpiarLineaProformaOCR(linea);
+        const numeros = texto.match(/\d+(?:[.,]\d+)?/g) || [];
+        if (!numeros.length) return 1;
+
+        const numerosProducto = new Set(extraerNumerosMaterial(itemCatalogo.nombre));
+        const candidatos = numeros
+            .map(numero => parseFloat(numero.replace(',', '.')))
+            .filter(numero => isFinite(numero) && numero > 0)
+            .filter(numero => !numerosProducto.has(String(numero)) && !numerosProducto.has(String(Math.round(numero))));
+
+        if (!candidatos.length) return 1;
+
+        const candidatosCantidad = candidatos.filter(numero => numero <= 1000);
+        if (!candidatosCantidad.length) return 1;
+
+        return candidatosCantidad[0];
+    }
+
+    function extraerCantidadYDescripcion(linea) {
+        let texto = limpiarLineaProformaOCR(linea);
 
         if (!texto) return null;
 
@@ -3150,13 +3208,21 @@ document.addEventListener('DOMContentLoaded', function() {
         let descripcion = texto;
 
         const inicio = texto.match(/^(\d+(?:[.,]\d+)?)\s+(.*)$/);
-        const finalExplicito = texto.match(/^(.*?)(?:\s+[xX]\s*|\s*[=:,-]\s*)(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS)?$/i);
+        const finalExplicito = texto.match(/^(.*?)(?:\s+[xX]\s*|\s*[=:,-]\s*)(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)?$/i);
+        const explicitoConUnidad = texto.match(/^(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)\s+(.*)$/i);
 
-        if (inicio && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(inicio[2])) {
+        if (explicitoConUnidad && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(explicitoConUnidad[3])) {
+            cantidad = parseFloat(explicitoConUnidad[1].replace(',', '.'));
+            if (/DOCENA/i.test(explicitoConUnidad[2])) cantidad *= 12;
+            if (/CIENTO/i.test(explicitoConUnidad[2])) cantidad *= 100;
+            descripcion = explicitoConUnidad[3].trim();
+        } else if (inicio && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(inicio[2])) {
             cantidad = parseFloat(inicio[1].replace(',', '.'));
             descripcion = inicio[2].trim();
         } else if (finalExplicito && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(finalExplicito[1])) {
             cantidad = parseFloat(finalExplicito[2].replace(',', '.'));
+            if (/DOCENA/i.test(finalExplicito[3] || '')) cantidad *= 12;
+            if (/CIENTO/i.test(finalExplicito[3] || '')) cantidad *= 100;
             descripcion = finalExplicito[1].trim();
         }
 
@@ -3172,20 +3238,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const agregados = [];
         const omitidos = [];
+        const detalles = [];
 
         lineas.forEach(linea => {
             const extraido = extraerCantidadYDescripcion(linea);
             if (!extraido) return;
 
-            const match = encontrarMejorCoincidenciaMaterial(extraido.descripcion, catalogo);
+            const matchExacto = buscarCoincidenciaExactaEnLinea(extraido.original, catalogo);
+            const match = matchExacto || encontrarMejorCoincidenciaMaterial(extraido.descripcion, catalogo);
             if (!match) {
                 omitidos.push(`"${extraido.original}"`);
+                detalles.push({
+                    original: extraido.original,
+                    descripcion: extraido.descripcion,
+                    cantidad: extraido.cantidad,
+                    estado: 'omitido',
+                    motivo: 'Sin coincidencia clara'
+                });
                 return;
             }
             if (!isFinite(match.item.precio) || match.item.precio <= 0) {
                 omitidos.push(`"${extraido.original}" (sin precio en la base)`);
+                detalles.push({
+                    original: extraido.original,
+                    descripcion: extraido.descripcion,
+                    cantidad: extraido.cantidad,
+                    estado: 'omitido',
+                    motivo: 'Sin precio en la base',
+                    sugerido: match.item.nombre
+                });
                 return;
             }
+
+            const cantidadDetectada = matchExacto
+                ? extraerCantidadDesdeLinea(extraido.original, match.item)
+                : extraido.cantidad;
 
             if (match.score >= 0.82 || match.aprendido || match.flexible) {
                 registrarAprendizajeMaterial(extraido.descripcion, match.item.nombre, match.aprendido ? 'alias_guardado' : 'ocr_alta_confianza');
@@ -3194,13 +3281,25 @@ document.addEventListener('DOMContentLoaded', function() {
             agregados.push({
                 nombre: match.item.nombre,
                 precio: match.item.precio,
-                cantidad: extraido.cantidad,
+                cantidad: cantidadDetectada,
                 score: match.score,
                 origen: extraido.original
             });
+
+            detalles.push({
+                original: extraido.original,
+                descripcion: extraido.descripcion,
+                cantidad: cantidadDetectada,
+                estado: 'sugerido',
+                nombre: match.item.nombre,
+                precio: match.item.precio,
+                score: match.score,
+                exacta: Boolean(match.exacta),
+                flexible: Boolean(match.flexible)
+            });
         });
 
-        return { agregados, omitidos };
+        return { agregados, omitidos, detalles };
     }
 
     function consolidarMaterialesReconocidos(items) {
@@ -3263,6 +3362,181 @@ document.addEventListener('DOMContentLoaded', function() {
         );
     }
 
+    function cerrarModalRevisionOCR() {
+        const modal = document.getElementById('ocr-review-modal');
+        if (modal) modal.remove();
+    }
+
+    function crearFilaRevisionOCR(detalle, index) {
+        const score = Math.round((detalle.score || 0) * 100);
+        const badgeColor = detalle.estado === 'omitido'
+            ? '#ffebe9'
+            : score >= 90
+                ? '#e8fff2'
+                : '#fff6dd';
+        const bordeColor = detalle.estado === 'omitido'
+            ? '#ff8a80'
+            : score >= 90
+                ? '#66bb6a'
+                : '#ffb300';
+
+        const checked = detalle.estado === 'sugerido' ? 'checked' : '';
+        const disabled = detalle.estado === 'omitido' ? '' : '';
+        const nombre = detalle.nombre || detalle.sugerido || '';
+        const cantidad = typeof detalle.cantidad === 'number' && isFinite(detalle.cantidad) ? detalle.cantidad : 1;
+
+        return `
+            <div style="border:1px solid ${bordeColor};border-radius:10px;padding:10px;background:${badgeColor};display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:start;">
+                <input type="checkbox" data-review-check="${index}" ${checked} style="margin-top:4px;">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="font-size:12px;color:#243648;"><b>Línea:</b> ${detalle.original}</div>
+                    <div style="display:grid;grid-template-columns:1fr 92px 64px;gap:8px;align-items:center;">
+                        <input type="text" data-review-name="${index}" value="${nombre.replace(/"/g, '&quot;')}" placeholder="Producto" style="padding:7px 8px;border-radius:8px;border:1px solid #b8d8ea;font-size:13px;">
+                        <input type="number" data-review-qty="${index}" value="${cantidad}" min="0" step="0.01" style="padding:7px 8px;border-radius:8px;border:1px solid #b8d8ea;font-size:13px;">
+                        <div style="font-size:12px;font-weight:700;color:#375a70;text-align:center;">${detalle.estado === 'omitido' ? 'OMIT.' : score + '%'}</div>
+                    </div>
+                    <div style="font-size:11px;color:#506373;">${detalle.estado === 'omitido' ? (detalle.motivo || 'Sin coincidencia') : (detalle.exacta ? 'Coincidencia exacta detectada' : detalle.flexible ? 'Coincidencia flexible sugerida' : 'Coincidencia por similitud')}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function mostrarModalRevisionOCR(resultado, origen) {
+        cerrarModalRevisionOCR();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'ocr-review-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:13500;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:14px;max-width:920px;width:100%;max-height:88vh;overflow:auto;padding:16px;box-shadow:0 12px 32px rgba(0,0,0,.25);animation:popIn 260ms cubic-bezier(.2,1.1,.3,1) forwards;';
+
+        const filas = resultado.detalles.length
+            ? resultado.detalles.map((detalle, index) => crearFilaRevisionOCR(detalle, index)).join('')
+            : '<div style="padding:14px;border-radius:10px;background:#fff6dd;color:#5a4a12;">No se detectaron líneas útiles en la imagen.</div>';
+
+        box.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+                <div>
+                    <div style="font-size:18px;font-weight:800;color:#102035;">Revisar líneas detectadas</div>
+                    <div style="font-size:12px;color:#5b6b7c;">Confirma o corrige cada línea antes de enviarla al proformador.</div>
+                </div>
+                <button id="ocr-review-close" class="proforma-action-btn" style="background:#e74c3c;color:#fff;">Cerrar</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">${filas}</div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+                <button id="ocr-review-cancel" class="proforma-action-btn" style="background:#6c757d;color:#fff;">Cancelar</button>
+                <button id="ocr-review-apply" class="proforma-action-btn btn-verde">Agregar seleccionados</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cerrar = () => cerrarModalRevisionOCR();
+        box.querySelector('#ocr-review-close').onclick = cerrar;
+        box.querySelector('#ocr-review-cancel').onclick = cerrar;
+        overlay.onclick = (e) => { if (e.target === overlay) cerrar(); };
+
+        box.querySelector('#ocr-review-apply').onclick = function() {
+            const catalogo = construirCatalogoMateriales();
+            const seleccionados = [];
+
+            resultado.detalles.forEach((detalle, index) => {
+                const checked = box.querySelector(`[data-review-check="${index}"]`);
+                if (!checked || !checked.checked) return;
+
+                const nameInput = box.querySelector(`[data-review-name="${index}"]`);
+                const qtyInput = box.querySelector(`[data-review-qty="${index}"]`);
+                const nombreIngresado = nameInput ? nameInput.value.trim() : '';
+                const cantidadIngresada = qtyInput ? parseFloat(qtyInput.value) : NaN;
+                const canonico = inferirNombreCanonico(nombreIngresado, catalogo);
+
+                if (!canonico || !isFinite(cantidadIngresada) || cantidadIngresada <= 0) return;
+
+                const item = catalogo.find(entry => entry.nombre === canonico);
+                if (!item || !isFinite(item.precio) || item.precio <= 0) return;
+
+                seleccionados.push({
+                    nombre: item.nombre,
+                    precio: item.precio,
+                    cantidad: cantidadIngresada,
+                    score: detalle.score || 0.75,
+                    origen: detalle.original
+                });
+
+                registrarAprendizajeMaterial(detalle.descripcion || detalle.original, item.nombre, origen === 'imagen' ? 'revision_ocr' : 'revision_manual');
+            });
+
+            const consolidados = consolidarMaterialesReconocidos(seleccionados);
+            consolidados.forEach(item => {
+                agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, item.origenes[0] || origen || '');
+            });
+
+            cerrar();
+            mostrarResumenImportacionOCR({
+                agregados: consolidados,
+                omitidos: resultado.detalles
+                    .filter((detalle, index) => {
+                        const checked = box.querySelector(`[data-review-check="${index}"]`);
+                        return !checked || !checked.checked;
+                    })
+                    .map(detalle => `"${detalle.original}"`)
+            });
+        };
+    }
+
+    function normalizarTextoDictado(texto) {
+        return (texto || '')
+            .replace(/\bcoma\b/gi, ',')
+            .replace(/\bpunto\b/gi, '.')
+            .replace(/\bm[aá]s\b/gi, '\n')
+            .replace(/\bluego\b/gi, '\n')
+            .replace(/\bsiguiente\b/gi, '\n')
+            .replace(/\bcantidad\b/gi, ' ')
+            .replace(/\bunidades\b/gi, ' ')
+            .replace(/\bunidad\b/gi, ' ')
+            .replace(/\bguion\b/gi, '-')
+            .replace(/\bdoble u\b/gi, 'W')
+            .replace(/\bequis\b/gi, ' x ')
+            .replace(/\bpor\b/gi, ' x ')
+            .replace(/\s+y\s+(?=\d)/gi, '\n')
+            .replace(/\s*,\s*/g, '\n')
+            .replace(/\s*;\s*/g, '\n')
+            .replace(/\s+/g, ' ')
+            .replace(/\n\s+/g, '\n')
+            .trim();
+    }
+
+    function extraerAlternativasDictado(event) {
+        const alternativas = [];
+        Array.from(event.results || []).forEach(result => {
+            Array.from(result || []).forEach(option => {
+                if (option && option.transcript) {
+                    alternativas.push(option.transcript.trim());
+                }
+            });
+        });
+        return alternativas.filter(Boolean);
+    }
+
+    function elegirMejorAlternativaDictado(alternativas, catalogo) {
+        let mejor = null;
+
+        alternativas.forEach(texto => {
+            const normalizado = normalizarTextoDictado(texto);
+            const procesado = procesarTextoOCRMateriales(normalizado, catalogo);
+            const puntaje = procesado.agregados.reduce((acc, item) => acc + (item.score || 0), 0);
+            const valor = puntaje - (procesado.omitidos.length * 0.35);
+
+            if (!mejor || valor > mejor.valor) {
+                mejor = { texto: normalizado, valor, procesado };
+            }
+        });
+
+        return mejor;
+    }
+
     async function procesarTextoListaMateriales(textoFuente, origen) {
         const catalogo = construirCatalogoMateriales();
         if (!catalogo.length) {
@@ -3270,9 +3544,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const procesado = procesarTextoOCRMateriales(textoFuente, catalogo);
-        const agregadosConsolidados = consolidarMaterialesReconocidos(procesado.agregados);
+        const textoNormalizado = origen === 'voz' ? normalizarTextoDictado(textoFuente) : textoFuente;
+        const procesado = procesarTextoOCRMateriales(textoNormalizado, catalogo);
+        if (origen === 'imagen') {
+            mostrarModalRevisionOCR(procesado, origen);
+            return;
+        }
 
+        const agregadosConsolidados = consolidarMaterialesReconocidos(procesado.agregados);
         agregadosConsolidados.forEach(item => {
             agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, item.origenes[0] || origen || '');
         });
@@ -3353,7 +3632,7 @@ document.addEventListener('DOMContentLoaded', function() {
         reconocimientoVozMateriales.lang = 'es-EC';
         reconocimientoVozMateriales.interimResults = false;
         reconocimientoVozMateriales.continuous = false;
-        reconocimientoVozMateriales.maxAlternatives = 1;
+        reconocimientoVozMateriales.maxAlternatives = 4;
 
         reconocimientoVozMateriales.onstart = function() {
             reconocimientoVozActivo = true;
@@ -3362,18 +3641,17 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         reconocimientoVozMateriales.onresult = async function(event) {
-            const transcript = Array.from(event.results || [])
-                .map(result => result[0] && result[0].transcript ? result[0].transcript : '')
-                .join('\n')
-                .trim();
-
             cerrarOverlayOCR();
-            if (!transcript) {
+            const catalogo = construirCatalogoMateriales();
+            const alternativas = extraerAlternativasDictado(event);
+            const mejorDictado = elegirMejorAlternativaDictado(alternativas, catalogo);
+
+            if (!mejorDictado || !mejorDictado.texto) {
                 alert('No se entendió el dictado. Intenta hablar más claro o más despacio.');
                 return;
             }
 
-            await procesarTextoListaMateriales(transcript, 'voz');
+            await procesarTextoListaMateriales(mejorDictado.texto, 'voz');
         };
 
         reconocimientoVozMateriales.onerror = function(event) {
