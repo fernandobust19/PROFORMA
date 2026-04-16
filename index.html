@@ -3051,8 +3051,15 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
+    function normalizarSinonimosMateriales(texto) {
+        return String(texto || '')
+            .replace(/\bPERFILES?\s+G\b/gi, ' CORREA ')
+            .replace(/\bPERFIL\s+TIPO\s+G\b/gi, ' CORREA ')
+            .replace(/\bPERFIL\s+GALVANIZADO\b/gi, ' CORREA ');
+    }
+
     function normalizarTextoMaterial(texto) {
-        return (texto || '')
+        return normalizarSinonimosMateriales(texto)
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase()
@@ -3394,6 +3401,44 @@ document.addEventListener('DOMContentLoaded', function() {
         .slice(0, limit);
 
         return candidatos;
+    }
+
+    function requiereSeleccionManualVoz(textoOCR, match, candidatos) {
+        const tokensConsulta = obtenerTokensMaterial(textoOCR).filter(token => token.length >= 2);
+        if (!tokensConsulta.length) return true;
+        if (!match || !match.item) return true;
+        if (match.exacta) return false;
+
+        const consultaNormalizada = normalizarTextoMaterial(textoOCR);
+        const nombreNormalizado = normalizarTextoMaterial(match.item.nombre);
+        const consultaEsParcial = consultaNormalizada && nombreNormalizado !== consultaNormalizada && nombreNormalizado.includes(consultaNormalizada);
+        const numerosConsulta = extraerNumerosMaterial(textoOCR);
+        const consultaCompacta = tokensConsulta.length <= 3;
+
+        const candidatosRelacionados = (candidatos || []).filter(entry => {
+            const tokensNombre = obtenerTokensMaterial(entry.item.nombre);
+            const numerosNombre = extraerNumerosMaterial(entry.item.nombre);
+            const coincideTokens = tokensConsulta.every(token => tokensNombre.some(tokenNombre => tokenNombre.includes(token) || token.includes(tokenNombre)));
+            const coincideNumeros = !numerosConsulta.length || numerosConsulta.some(numero => numerosNombre.includes(numero));
+            return coincideTokens || coincideNumeros;
+        });
+
+        if (consultaCompacta && consultaEsParcial && candidatosRelacionados.length > 1) {
+            return true;
+        }
+
+        if (consultaCompacta && candidatosRelacionados.length > 1) {
+            return true;
+        }
+
+        if (candidatosRelacionados.length >= 2) {
+            const diferencia = Math.abs((candidatosRelacionados[0].score || 0) - (candidatosRelacionados[1].score || 0));
+            if (diferencia < 0.12) {
+                return true;
+            }
+        }
+
+        return Boolean((match.score || 0) < 0.84 || match.flexible);
     }
 
     function limpiarLineaProformaOCR(linea) {
@@ -3948,16 +3993,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const matchExacto = buscarCoincidenciaExactaEnLinea(extraido.original, catalogo);
             const match = matchExacto || encontrarMejorCoincidenciaMaterial(extraido.descripcion, catalogo);
+            const candidatos = obtenerCandidatosMateriales(extraido.descripcion, catalogo, 8)
+                .filter(entry => isFinite(entry.item.precio) && entry.item.precio > 0);
             if (match && match.item && isFinite(match.item.precio) && match.item.precio > 0) {
                 const cantidadDetectada = matchExacto
                     ? extraerCantidadDesdeLinea(extraido.original, match.item)
                     : extraido.cantidad;
-                const necesitaSeleccion = Boolean(
-                    !matchExacto && (
-                        (match.score || 0) < 0.84 ||
-                    match.flexible
-                    )
-                );
+                const necesitaSeleccion = requiereSeleccionManualVoz(extraido.descripcion, match, candidatos);
 
                 if (!necesitaSeleccion) {
                     agregados.push({
@@ -3971,8 +4013,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            const candidatos = obtenerCandidatosMateriales(extraido.descripcion, catalogo, 5)
-                .filter(entry => isFinite(entry.item.precio) && entry.item.precio > 0);
             if (candidatos.length) {
                 pendientes.push({
                     original: extraido.original,
@@ -4200,7 +4240,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function normalizarTextoDictado(texto) {
         const base = convertirNumerosHabladosATexto(
-            String(texto || '')
+            normalizarSinonimosMateriales(String(texto || ''))
                 .replace(/\bcoma\b/gi, ',')
                 .replace(/\bpunto\b/gi, '.')
                 .replace(/\bguion\b/gi, '-')
