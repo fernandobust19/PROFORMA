@@ -907,6 +907,7 @@
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()" title="Importar por imagen" aria-label="Importar por imagen">📷<span>Imagen</span></button>
                                 <button class="proforma-action-btn glass-action-btn" id="voice-materials-btn" onclick="iniciarDictadoMateriales()" title="Dictar materiales" aria-label="Dictar materiales">🎤<span>Voz</span></button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirConfiguracionGoogleAI()" title="Configurar IA de Google" aria-label="Configurar IA de Google">✨<span>IA</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarListaMateriales()" title="Ver materiales" aria-label="Ver materiales">📋<span>Materiales</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
@@ -2797,9 +2798,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const OCR_LEARNING_STORAGE_KEY = 'ocr_material_learning_v2';
+    const GOOGLE_AI_STORAGE_KEY = 'google_ai_material_config_v1';
     let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
+    let googleAIConfig = cargarGoogleAIConfig();
     let reconocimientoVozMateriales = null;
     let reconocimientoVozActivo = false;
+    let modoImportacionImagen = 'lista_cliente';
 
     function cargarBaseAprendizajeMateriales() {
         try {
@@ -2819,6 +2823,140 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('No se pudo guardar la base de aprendizaje OCR:', error);
         }
+    }
+
+    function cargarGoogleAIConfig() {
+        const base = {
+            enabled: false,
+            apiKey: '',
+            model: 'gemini-2.5-flash'
+        };
+
+        try {
+            const raw = localStorage.getItem(GOOGLE_AI_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    return {
+                        enabled: Boolean(parsed.enabled),
+                        apiKey: String(parsed.apiKey || '').trim(),
+                        model: String(parsed.model || base.model).trim() || base.model
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('No se pudo cargar la configuración de Google AI:', error);
+        }
+
+        if (window.geminiConfig && typeof window.geminiConfig === 'object') {
+            return {
+                enabled: Boolean(window.geminiConfig.enabled),
+                apiKey: String(window.geminiConfig.apiKey || '').trim(),
+                model: String(window.geminiConfig.model || base.model).trim() || base.model
+            };
+        }
+
+        return base;
+    }
+
+    function guardarGoogleAIConfig() {
+        try {
+            localStorage.setItem(GOOGLE_AI_STORAGE_KEY, JSON.stringify(googleAIConfig));
+        } catch (error) {
+            console.error('No se pudo guardar la configuración de Google AI:', error);
+        }
+    }
+
+    function googleAIHabilitada() {
+        return Boolean(
+            googleAIConfig &&
+            googleAIConfig.enabled &&
+            String(googleAIConfig.apiKey || '').trim()
+        );
+    }
+
+    function cerrarConfiguracionGoogleAI() {
+        const modal = document.getElementById('google-ai-config-modal');
+        if (modal) modal.remove();
+    }
+
+    function abrirConfiguracionGoogleAI() {
+        cerrarConfiguracionGoogleAI();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'google-ai-config-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:13800;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:16px;max-width:540px;width:100%;padding:18px;box-shadow:0 12px 32px rgba(0,0,0,.25);animation:popIn 240ms cubic-bezier(.2,1.1,.3,1) forwards;';
+        box.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;">
+                <div>
+                    <div style="font-size:18px;font-weight:800;color:#102035;">IA de Google</div>
+                    <div style="font-size:12px;color:#5b6b7c;">Usa Gemini para interpretar mejor listas, proformas escaneadas y texto difícil.</div>
+                </div>
+                <button id="google-ai-close" class="proforma-action-btn" style="background:#e74c3c;color:#fff;">Cerrar</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:#102035;font-weight:700;">
+                <input type="checkbox" id="google-ai-enabled" ${googleAIConfig.enabled ? 'checked' : ''}>
+                Activar asistencia de IA al importar
+            </label>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <div>
+                    <div style="font-size:12px;font-weight:700;color:#27445c;margin-bottom:4px;">API Key de Gemini</div>
+                    <input type="password" id="google-ai-api-key" placeholder="Pega aquí tu API key de Google AI Studio" value="${String(googleAIConfig.apiKey || '').replace(/"/g, '&quot;')}" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #c7dceb;font-size:13px;box-sizing:border-box;">
+                </div>
+                <div>
+                    <div style="font-size:12px;font-weight:700;color:#27445c;margin-bottom:4px;">Modelo</div>
+                    <input type="text" id="google-ai-model" value="${String(googleAIConfig.model || 'gemini-2.5-flash').replace(/"/g, '&quot;')}" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #c7dceb;font-size:13px;box-sizing:border-box;">
+                </div>
+                <div style="font-size:11px;line-height:1.5;color:#586d7e;background:#f7fbff;border:1px solid #d8e9f6;border-radius:10px;padding:10px 12px;">
+                    Esta clave queda guardada en este navegador. Funciona bien para una app local, pero no es la opción más segura si luego publicas esta página en internet.
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+                <button id="google-ai-clear" class="proforma-action-btn" style="background:#6c757d;color:#fff;">Limpiar</button>
+                <button id="google-ai-save" class="proforma-action-btn btn-verde">Guardar</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cerrar = () => cerrarConfiguracionGoogleAI();
+        box.querySelector('#google-ai-close').onclick = cerrar;
+        overlay.onclick = (event) => {
+            if (event.target === overlay) cerrar();
+        };
+
+        box.querySelector('#google-ai-clear').onclick = function() {
+            googleAIConfig = {
+                enabled: false,
+                apiKey: '',
+                model: 'gemini-2.5-flash'
+            };
+            guardarGoogleAIConfig();
+            cerrar();
+            alert('Se limpió la configuración de Google AI.');
+        };
+
+        box.querySelector('#google-ai-save').onclick = function() {
+            const enabled = box.querySelector('#google-ai-enabled').checked;
+            const apiKey = box.querySelector('#google-ai-api-key').value.trim();
+            const model = box.querySelector('#google-ai-model').value.trim() || 'gemini-2.5-flash';
+
+            if (enabled && !apiKey) {
+                alert('Para activar Google AI debes pegar una API key.');
+                return;
+            }
+
+            googleAIConfig = { enabled, apiKey, model };
+            guardarGoogleAIConfig();
+            cerrar();
+            alert(enabled
+                ? 'Google AI quedó activada para apoyar el reconocimiento.'
+                : 'Google AI quedó desactivada. La app seguirá usando el reconocimiento local.');
+        };
     }
 
     function abrirSelectorImagenMateriales() {
@@ -3318,6 +3456,234 @@ document.addEventListener('DOMContentLoaded', function() {
         return { agregados, omitidos, detalles };
     }
 
+    function obtenerMuestrasAprendizajeIA(limit = 60) {
+        const aliases = baseAprendizajeMateriales && baseAprendizajeMateriales.aliases
+            ? Object.entries(baseAprendizajeMateriales.aliases)
+            : [];
+
+        return aliases
+            .filter(([alias, valor]) => alias && valor && valor.canonical)
+            .slice(0, limit)
+            .map(([alias, valor]) => ({
+                alias,
+                canonical: valor.canonical
+            }));
+    }
+
+    function extraerJSONGemini(texto) {
+        const limpio = String(texto || '').trim();
+        if (!limpio) return null;
+
+        const bloque = limpio.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const candidato = bloque ? bloque[1].trim() : limpio;
+        const inicio = candidato.indexOf('{');
+        const fin = candidato.lastIndexOf('}');
+        if (inicio === -1 || fin === -1 || fin < inicio) return null;
+
+        try {
+            return JSON.parse(candidato.slice(inicio, fin + 1));
+        } catch (error) {
+            console.error('No se pudo interpretar JSON de Gemini:', error, candidato);
+            return null;
+        }
+    }
+
+    async function consultarGoogleAIParaMateriales(textoFuente, catalogo, resultadoLocal, origen) {
+        if (!googleAIHabilitada()) return null;
+
+        const detallesUtiles = (resultadoLocal && resultadoLocal.detalles) ? resultadoLocal.detalles : [];
+        if (!detallesUtiles.length) return null;
+
+        const lineas = detallesUtiles.map((detalle, index) => ({
+            index,
+            original: detalle.original,
+            descripcion: detalle.descripcion || detalle.original || '',
+            cantidad_detectada: detalle.cantidad || 1,
+            sugerencia_local: detalle.nombre || detalle.sugerido || '',
+            confianza_local: Number((detalle.score || 0).toFixed(3)),
+            coincidencia_exacta_local: Boolean(detalle.exacta),
+            candidatos: obtenerCandidatosMateriales(detalle.descripcion || detalle.original || '', catalogo, 6)
+                .map(entry => ({
+                    nombre: entry.item.nombre,
+                    score: Number((entry.score || 0).toFixed(3))
+                }))
+        }));
+
+        const payload = {
+            origen,
+            instrucciones: {
+                objetivo: 'Seleccionar el producto correcto del catalogo y la cantidad correcta para cada linea.',
+                reglas: [
+                    'Solo puedes elegir productos de los candidatos entregados para cada linea.',
+                    'Debes respetar cantidades, incluyendo unidad, docena y ciento si aparecen.',
+                    'Si una linea parece venir de una proforma ya hecha, prioriza copiar exactamente el mismo producto del catalogo.',
+                    'Si la linea es dudosa, devuelve selected_name vacio y explica omit_reason.',
+                    'Responde solo JSON valido.'
+                ]
+            },
+            aprendizaje_local: obtenerMuestrasAprendizajeIA(80),
+            lineas
+        };
+
+        const prompt = [
+            'Eres un asistente experto en materiales de construccion y ferreteria.',
+            'Analiza cada linea de una lista o proforma y elige el mejor producto del catalogo.',
+            'La app solo puede agregar productos existentes; no inventes nombres nuevos.',
+            'Devuelve exclusivamente JSON con esta forma:',
+            '{"lines":[{"index":0,"selected_name":"NOMBRE EXACTO","quantity":1,"confidence":0.0,"omit_reason":"","notes":""}]}',
+            'Si no estas seguro, selected_name debe ser "".',
+            JSON.stringify(payload)
+        ].join('\n');
+
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(googleAIConfig.model || 'gemini-2.5-flash')}:generateContent?key=${encodeURIComponent(googleAIConfig.apiKey)}`;
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [{ text: prompt }]
+                    }
+                ],
+                generationConfig: {
+                    temperature: 0.1,
+                    responseMimeType: 'application/json'
+                }
+            })
+        });
+
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Google AI respondió ${response.status}: ${body || 'sin detalle'}`);
+        }
+
+        const data = await response.json();
+        const texto = (((data || {}).candidates || [])[0] || {}).content;
+        const partes = texto && Array.isArray(texto.parts) ? texto.parts : [];
+        const respuestaPlano = partes.map(part => part && part.text ? part.text : '').join('\n').trim();
+        return extraerJSONGemini(respuestaPlano);
+    }
+
+    function fusionarResultadoLocalConGoogleAI(resultadoLocal, respuestaIA, catalogo) {
+        if (!respuestaIA || !Array.isArray(respuestaIA.lines)) {
+            return resultadoLocal;
+        }
+
+        const catalogoPorNombre = new Map(catalogo.map(item => [item.nombre, item]));
+        const sugerenciasIA = new Map(
+            respuestaIA.lines
+                .filter(linea => linea && typeof linea.index === 'number')
+                .map(linea => [linea.index, linea])
+        );
+
+        const agregados = [];
+        const omitidos = [];
+        const detalles = [];
+
+        (resultadoLocal.detalles || []).forEach((detalle, index) => {
+            const sugerenciaIA = sugerenciasIA.get(index);
+            const sugerenciaLocal = detalle.nombre || detalle.sugerido || '';
+            const itemLocal = sugerenciaLocal ? catalogoPorNombre.get(sugerenciaLocal) : null;
+            const itemIA = sugerenciaIA && sugerenciaIA.selected_name
+                ? catalogoPorNombre.get(String(sugerenciaIA.selected_name).trim())
+                : null;
+
+            const confianzaIA = sugerenciaIA && isFinite(parseFloat(sugerenciaIA.confidence))
+                ? parseFloat(sugerenciaIA.confidence)
+                : 0;
+            const cantidadIA = sugerenciaIA && isFinite(parseFloat(sugerenciaIA.quantity))
+                ? parseFloat(sugerenciaIA.quantity)
+                : NaN;
+
+            let itemFinal = itemLocal || null;
+            let cantidadFinal = typeof detalle.cantidad === 'number' && isFinite(detalle.cantidad) ? detalle.cantidad : 1;
+            let scoreFinal = detalle.score || 0;
+            let usoIA = false;
+
+            const localEsFuerte = Boolean(detalle.exacta || (detalle.score || 0) >= 0.9);
+            const iaEsValida = Boolean(itemIA && isFinite(itemIA.precio) && itemIA.precio > 0 && confianzaIA >= 0.72);
+
+            if (!localEsFuerte && iaEsValida) {
+                itemFinal = itemIA;
+                scoreFinal = Math.max(scoreFinal, confianzaIA);
+                if (isFinite(cantidadIA) && cantidadIA > 0) {
+                    cantidadFinal = cantidadIA;
+                }
+                usoIA = true;
+            } else if (!itemFinal && iaEsValida) {
+                itemFinal = itemIA;
+                scoreFinal = confianzaIA;
+                if (isFinite(cantidadIA) && cantidadIA > 0) {
+                    cantidadFinal = cantidadIA;
+                }
+                usoIA = true;
+            }
+
+            if (itemFinal && isFinite(itemFinal.precio) && itemFinal.precio > 0) {
+                agregados.push({
+                    nombre: itemFinal.nombre,
+                    precio: itemFinal.precio,
+                    cantidad: cantidadFinal,
+                    score: scoreFinal,
+                    origen: detalle.original
+                });
+
+                detalles.push({
+                    original: detalle.original,
+                    descripcion: detalle.descripcion,
+                    cantidad: cantidadFinal,
+                    estado: 'sugerido',
+                    nombre: itemFinal.nombre,
+                    precio: itemFinal.precio,
+                    score: scoreFinal,
+                    exacta: Boolean(detalle.exacta),
+                    flexible: Boolean(detalle.flexible),
+                    ia: usoIA,
+                    notasIA: sugerenciaIA && sugerenciaIA.notes ? String(sugerenciaIA.notes) : ''
+                });
+
+                if (usoIA && scoreFinal >= 0.88) {
+                    registrarAprendizajeMaterial(detalle.descripcion || detalle.original, itemFinal.nombre, 'gemini_alta_confianza');
+                }
+                return;
+            }
+
+            const motivo = sugerenciaIA && sugerenciaIA.omit_reason
+                ? String(sugerenciaIA.omit_reason)
+                : (detalle.motivo || 'Sin coincidencia clara');
+
+            omitidos.push(`"${detalle.original}"`);
+            detalles.push({
+                original: detalle.original,
+                descripcion: detalle.descripcion,
+                cantidad: detalle.cantidad,
+                estado: 'omitido',
+                motivo,
+                ia: Boolean(sugerenciaIA)
+            });
+        });
+
+        return { agregados, omitidos, detalles };
+    }
+
+    async function procesarTextoOCRMaterialesConIA(textoOCR, catalogo, origen) {
+        const resultadoLocal = procesarTextoOCRMateriales(textoOCR, catalogo);
+        if (!googleAIHabilitada() || origen === 'voz') {
+            return resultadoLocal;
+        }
+
+        try {
+            const respuestaIA = await consultarGoogleAIParaMateriales(textoOCR, catalogo, resultadoLocal, origen);
+            return fusionarResultadoLocalConGoogleAI(resultadoLocal, respuestaIA, catalogo);
+        } catch (error) {
+            console.error('No se pudo usar Google AI, se mantiene el reconocimiento local:', error);
+            return resultadoLocal;
+        }
+    }
+
     function consolidarMaterialesReconocidos(items) {
         const mapa = new Map();
         items.forEach(item => {
@@ -3538,7 +3904,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <input type="number" data-review-qty="${index}" value="${cantidad}" min="0" step="0.01" style="padding:7px 8px;border-radius:8px;border:1px solid #b8d8ea;font-size:13px;">
                         <div style="font-size:12px;font-weight:700;color:#375a70;text-align:center;">${detalle.estado === 'omitido' ? 'OMIT.' : score + '%'}</div>
                     </div>
-                    <div style="font-size:11px;color:#506373;">${detalle.estado === 'omitido' ? (detalle.motivo || 'Sin coincidencia') : (detalle.exacta ? 'Coincidencia exacta detectada' : detalle.flexible ? 'Coincidencia flexible sugerida' : 'Coincidencia por similitud')}</div>
+                    <div style="font-size:11px;color:#506373;">${detalle.estado === 'omitido' ? (detalle.motivo || 'Sin coincidencia') : (detalle.ia ? 'Coincidencia sugerida con Google AI + catálogo' : detalle.exacta ? 'Coincidencia exacta detectada' : detalle.flexible ? 'Coincidencia flexible sugerida' : 'Coincidencia por similitud')}${detalle.notasIA ? ' · ' + detalle.notasIA : ''}</div>
                 </div>
             </div>
         `;
@@ -3693,7 +4059,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const textoNormalizado = origen === 'voz' ? normalizarTextoDictado(textoFuente) : textoFuente;
-        const procesado = procesarTextoOCRMateriales(textoNormalizado, catalogo);
+        const procesado = await procesarTextoOCRMaterialesConIA(textoNormalizado, catalogo, origen);
         if (origen === 'imagen') {
             mostrarModalRevisionOCR(procesado, origen);
             return;
