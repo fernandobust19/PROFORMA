@@ -1969,10 +1969,39 @@ window.guardarPaginaPersonalizadaDesdeModal = guardarPaginaPersonalizadaDesdeMod
 let proformaId = null;
 let autoSaveTimeout = null;
 let hasAutoSaved = false; // Indica si la proforma actual ya fue autoguardada
+const MAX_AUTOGUARDADOS = 100;
 
 // Generar ID único para cada nueva proforma
 function generarProformaId() {
     return 'proforma_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+function limitarAutoguardados(proformas, proformaActualId) {
+    const lista = Array.isArray(proformas) ? [...proformas] : [];
+    if (lista.length <= MAX_AUTOGUARDADOS) return lista;
+
+    lista.sort((a, b) => {
+        const fechaA = a && a.savedAt ? new Date(a.savedAt).getTime() : 0;
+        const fechaB = b && b.savedAt ? new Date(b.savedAt).getTime() : 0;
+        return fechaB - fechaA;
+    });
+
+    const recientes = lista.slice(0, MAX_AUTOGUARDADOS);
+    if (!proformaActualId) {
+        return recientes;
+    }
+
+    const existeActual = recientes.some(item => item && item.proformaId === proformaActualId);
+    if (existeActual) return recientes;
+
+    const actual = lista.find(item => item && item.proformaId === proformaActualId);
+    if (!actual) return recientes;
+
+    return [actual, ...recientes.slice(0, MAX_AUTOGUARDADOS - 1)].sort((a, b) => {
+        const fechaA = a && a.savedAt ? new Date(a.savedAt).getTime() : 0;
+        const fechaB = b && b.savedAt ? new Date(b.savedAt).getTime() : 0;
+        return fechaB - fechaA;
+    });
 }
 
 // Función para obtener el total actual de la proforma
@@ -2109,6 +2138,8 @@ function autoguardarProforma() {
             // Crear nuevo autoguardado
             proformasAuto.push(datosAutoguardado);
         }
+
+        proformasAuto = limitarAutoguardados(proformasAuto, proformaId);
         
         localStorage.setItem('proformas_autoguardadas', JSON.stringify(proformasAuto));
 
@@ -4634,7 +4665,53 @@ document.addEventListener('DOMContentLoaded', function() {
     // Contenedor de contenido
     const contentContainer = document.createElement('div');
     contentContainer.style.cssText = 'padding:15px 20px;max-height:400px;overflow-y:auto;';
-    
+    const selectionState = {
+        manual: new Set(),
+        auto: new Set()
+    };
+    let tipoActual = 'manual';
+
+    function obtenerClaveSeleccion(item) {
+        return item && (item.proformaId || item.id || `${item.name || 'sin_nombre'}-${item.savedAt || ''}`);
+    }
+
+    function limpiarSeleccion(tipo) {
+        selectionState[tipo] = new Set();
+    }
+
+    async function eliminarProformasSeleccionadas(tipo, items) {
+        if (!items.length) return;
+
+        const storageKey = tipo === 'manual' ? 'proformas_guardadas' : 'proformas_autoguardadas';
+        const confirmar = confirm(`¿Eliminar ${items.length} proforma${items.length === 1 ? '' : 's'} seleccionada${items.length === 1 ? '' : 's'}?`);
+        if (!confirmar) return;
+
+        const claves = new Set(items.map(obtenerClaveSeleccion));
+
+        for (const item of items) {
+            if (item.isRemote && window.CloudSync && typeof window.CloudSync.deleteRemoteProforma === 'function') {
+                try {
+                    await window.CloudSync.deleteRemoteProforma(item);
+                } catch (error) {
+                    console.warn('No se pudo eliminar una proforma remota:', error);
+                }
+            }
+        }
+
+        let proformasActuales = [];
+        try {
+            proformasActuales = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        } catch (e) {
+            proformasActuales = [];
+        }
+        if (!Array.isArray(proformasActuales)) proformasActuales = [];
+
+        proformasActuales = proformasActuales.filter(item => !claves.has(obtenerClaveSeleccion(item)));
+        localStorage.setItem(storageKey, JSON.stringify(proformasActuales));
+        limpiarSeleccion(tipo);
+        mostrarListaProformas(tipo);
+    }
+
     // Combina proformas locales y remotas
     function combinarListasDeProformas(locales, remotas) {
         const mapa = new Map();
@@ -4657,6 +4734,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para mostrar lista de proformas (local + nube)
     async function mostrarListaProformas(tipo) {
+        tipoActual = tipo;
         contentContainer.innerHTML = '<div style="padding:20px;color:#666;text-align:center;">Cargando proformas...</div>';
 
         const storageKey = tipo === 'manual' ? 'proformas_guardadas' : 'proformas_autoguardadas';
@@ -4685,11 +4763,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const proformas = combinarListasDeProformas(proformasLocales, proformasRemotas);
+        const seleccionadas = selectionState[tipo];
 
         if (proformas.length === 0) {
             const emptyMsg = tipo === 'manual'
                 ? 'No hay proformas guardadas manualmente.<br>Usa el botón "💾 Guardar Proforma" para crear una.'
-                : 'No hay autoguardados disponibles.<br>Los autoguardados se crean automáticamente al modificar la proforma.';
+                : `No hay autoguardados disponibles.<br>Los autoguardados se crean automáticamente al modificar la proforma.<br>Límite actual: ${MAX_AUTOGUARDADOS}.`;
 
             const configuracionMsg = !nubeActiva ? '<div style="margin-top:10px;color:#999;font-size:11px;">Configura Firebase en <code>window.firebaseConfig</code> para habilitar respaldos en la nube.</div>' : '';
             contentContainer.innerHTML = `<div style="padding:20px 6px;color:#888;text-align:center;">${emptyMsg}${configuracionMsg}</div>`;
@@ -4697,16 +4776,71 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         contentContainer.innerHTML = '';
+        const toolsBar = document.createElement('div');
+        toolsBar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 0 12px 0;border-bottom:1px solid #edf2f7;margin-bottom:6px;flex-wrap:wrap;';
+        const infoBar = document.createElement('div');
+        infoBar.style.cssText = 'font-size:12px;color:#56697b;';
+        infoBar.innerHTML = tipo === 'auto'
+            ? `Autoguardados disponibles: <b>${proformas.length}</b> / ${MAX_AUTOGUARDADOS}`
+            : `Guardados manuales disponibles: <b>${proformas.length}</b>`;
+
+        const actionBar = document.createElement('div');
+        actionBar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
+
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.textContent = 'Seleccionar todos';
+        selectAllBtn.style.cssText = 'padding:6px 10px;background:#eef6ff;color:#12507a;border:1px solid #b9d9f0;border-radius:6px;cursor:pointer;font-size:12px;';
+        selectAllBtn.onclick = function() {
+            if (seleccionadas.size === proformas.length) {
+                seleccionadas.clear();
+            } else {
+                proformas.forEach(item => seleccionadas.add(obtenerClaveSeleccion(item)));
+            }
+            mostrarListaProformas(tipo);
+        };
+
+        const deleteSelectedBtn = document.createElement('button');
+        deleteSelectedBtn.textContent = seleccionadas.size ? `Eliminar seleccionadas (${seleccionadas.size})` : 'Eliminar seleccionadas';
+        deleteSelectedBtn.style.cssText = `padding:6px 10px;border:none;border-radius:6px;cursor:${seleccionadas.size ? 'pointer' : 'not-allowed'};font-size:12px;background:${seleccionadas.size ? '#ff3864' : '#f0b8c3'};color:#fff;`;
+        deleteSelectedBtn.disabled = !seleccionadas.size;
+        deleteSelectedBtn.onclick = function() {
+            const itemsSeleccionados = proformas.filter(item => seleccionadas.has(obtenerClaveSeleccion(item)));
+            eliminarProformasSeleccionadas(tipo, itemsSeleccionados);
+        };
+
+        actionBar.appendChild(selectAllBtn);
+        actionBar.appendChild(deleteSelectedBtn);
+        toolsBar.appendChild(infoBar);
+        toolsBar.appendChild(actionBar);
+        contentContainer.appendChild(toolsBar);
+
         proformas.forEach((item, idx) => {
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:8px;';
+            const claveItem = obtenerClaveSeleccion(item);
 
             const info = document.createElement('div');
+            info.style.cssText = 'display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;';
+            const selector = document.createElement('input');
+            selector.type = 'checkbox';
+            selector.checked = seleccionadas.has(claveItem);
+            selector.style.cssText = 'margin-top:4px;transform:scale(1.08);cursor:pointer;';
+            selector.onchange = function() {
+                if (this.checked) {
+                    seleccionadas.add(claveItem);
+                } else {
+                    seleccionadas.delete(claveItem);
+                }
+                mostrarListaProformas(tipo);
+            };
+
+            const infoText = document.createElement('div');
+            infoText.style.cssText = 'min-width:0;flex:1;';
             const iconoTipo = item.isRemote ? '☁️' : (tipo === 'manual' ? '💾' : '🔄');
             const etiquetaOrigen = item.isRemote ? 'Respaldo en la nube' : (tipo === 'manual' ? 'Guardado local' : 'Autoguardado local');
             const fechaMostrada = item.savedAt ? new Date(item.savedAt).toLocaleString('es-ES') : '';
             const resumenTotal = item.total ? `<span style="color:#102035;font-weight:600;">Total: $${Number(item.total).toFixed(2)}</span>` : '';
-            info.innerHTML = `
+            infoText.innerHTML = `
                 <div style='font-weight:600;display:flex;align-items:center;gap:6px;'>
                     ${iconoTipo} ${item.name || 'proforma_' + (idx + 1)}
                 </div>
@@ -4716,6 +4850,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 ${item.lastUpdate ? `<div style='font-size:10px;color:#999;'>Última actualización: ${item.lastUpdate}</div>` : ''}
                 ${resumenTotal}
             `;
+            info.appendChild(selector);
+            info.appendChild(infoText);
 
             const buttonsContainer = document.createElement('div');
             buttonsContainer.style.cssText = 'display:flex;gap:6px;';
@@ -4769,13 +4905,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!Array.isArray(proformasActuales)) proformasActuales = [];
 
                 const idxEliminar = proformasActuales.findIndex(p =>
-                    p && (p.proformaId === item.proformaId || (p.name === item.name && p.savedAt === item.savedAt))
+                    p && (obtenerClaveSeleccion(p) === claveItem || (p.proformaId === item.proformaId || (p.name === item.name && p.savedAt === item.savedAt)))
                 );
                 if (idxEliminar !== -1) {
                     proformasActuales.splice(idxEliminar, 1);
                     localStorage.setItem(storageKey, JSON.stringify(proformasActuales));
                 }
 
+                seleccionadas.delete(claveItem);
                 mostrarListaProformas(tipo);
             };
 
@@ -4832,6 +4969,9 @@ document.addEventListener('DOMContentLoaded', function() {
     box.appendChild(footer);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
+    overlay.onclick = function(event) {
+        if (event.target === overlay) overlay.remove();
+    };
     
     // Mostrar por defecto la pestaña de guardado manual
     mostrarListaProformas('manual');
