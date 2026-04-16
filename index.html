@@ -907,6 +907,7 @@
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()" title="Importar por imagen" aria-label="Importar por imagen">📷<span>Imagen</span></button>
                                 <button class="proforma-action-btn glass-action-btn" id="voice-materials-btn" onclick="iniciarDictadoMateriales()" title="Dictar materiales" aria-label="Dictar materiales">🎤<span>Voz</span></button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirModalTextoMateriales()" title="Pegar lista de materiales" aria-label="Pegar lista de materiales">📝<span>Texto</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirConfiguracionGoogleAI()" title="Configurar IA de Google" aria-label="Configurar IA de Google">✨<span>IA</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarListaMateriales()" title="Ver materiales" aria-label="Ver materiales">📋<span>Materiales</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
@@ -2997,11 +2998,65 @@ document.addEventListener('DOMContentLoaded', function() {
         input.click();
     }
 
+    function cerrarModalTextoMateriales() {
+        const modal = document.getElementById('text-materials-modal');
+        if (modal) modal.remove();
+    }
+
+    function abrirModalTextoMateriales() {
+        cerrarModalTextoMateriales();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'text-materials-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:13850;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:16px;max-width:760px;width:100%;padding:18px;box-shadow:0 12px 32px rgba(0,0,0,.25);animation:popIn 240ms cubic-bezier(.2,1.1,.3,1) forwards;';
+        box.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;">
+                <div>
+                    <div style="font-size:18px;font-weight:800;color:#102035;">Pegar lista de materiales</div>
+                    <div style="font-size:12px;color:#5b6b7c;">Pega aquí texto completo de una lista o de una proforma y se revisará antes de agregarlo.</div>
+                </div>
+                <button id="text-materials-close" class="proforma-action-btn" style="background:#e74c3c;color:#fff;">Cerrar</button>
+            </div>
+            <textarea id="text-materials-input" placeholder="Ejemplo:\n2 tubo 100 x 100\n15 angular 40 x 40\n1 docena tornillo 1/2" style="width:100%;min-height:240px;resize:vertical;padding:12px 14px;border-radius:12px;border:1px solid #c7dceb;font-size:14px;line-height:1.45;box-sizing:border-box;"></textarea>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+                <button id="text-materials-cancel" class="proforma-action-btn" style="background:#6c757d;color:#fff;">Cancelar</button>
+                <button id="text-materials-apply" class="proforma-action-btn btn-verde">Analizar y revisar</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cerrar = () => cerrarModalTextoMateriales();
+        box.querySelector('#text-materials-close').onclick = cerrar;
+        box.querySelector('#text-materials-cancel').onclick = cerrar;
+        overlay.onclick = function(event) {
+            if (event.target === overlay) cerrar();
+        };
+
+        const textarea = box.querySelector('#text-materials-input');
+        if (textarea) textarea.focus();
+
+        box.querySelector('#text-materials-apply').onclick = async function() {
+            const texto = textarea ? textarea.value.trim() : '';
+            if (!texto) {
+                alert('Pega una lista o una proforma en texto para continuar.');
+                return;
+            }
+            cerrar();
+            await procesarTextoListaMateriales(texto, 'texto');
+        };
+    }
+
     function normalizarTextoMaterial(texto) {
         return (texto || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase()
+            .replace(/×/g, ' X ')
             .replace(/["']/g, ' PULG ')
             .replace(/\bPOR\b/g, ' X ')
             .replace(/\bPULGADAS?\b/g, ' PULG ')
@@ -3073,18 +3128,35 @@ document.addEventListener('DOMContentLoaded', function() {
         return (normalizarTextoMaterial(texto).match(/\d+(?:\.\d+)?/g) || []);
     }
 
+    function extraerDimensionesMaterial(texto) {
+        return [...normalizarTextoMaterial(texto).matchAll(/\b(\d{1,4})\s+X\s+(\d{1,4})\b/g)]
+            .map(match => `${parseInt(match[1], 10)}x${parseInt(match[2], 10)}`);
+    }
+
     function calcularCompatibilidadNumerica(textoOCR, itemCatalogo) {
         const numerosConsulta = extraerNumerosMaterial(textoOCR);
         const numerosCatalogo = extraerNumerosMaterial(itemCatalogo.nombre);
+        const dimensionesConsulta = extraerDimensionesMaterial(textoOCR);
+        const dimensionesCatalogo = extraerDimensionesMaterial(itemCatalogo.nombre);
+
+        if (dimensionesConsulta.length && dimensionesCatalogo.length) {
+            const coincidenciasDimension = dimensionesConsulta.filter(valor => dimensionesCatalogo.includes(valor)).length;
+            if (!coincidenciasDimension) {
+                return { score: 0, mismatchFuerte: true, exactitudDimension: 0 };
+            }
+            if (coincidenciasDimension === dimensionesConsulta.length && coincidenciasDimension === dimensionesCatalogo.length) {
+                return { score: 1, mismatchFuerte: false, exactitudDimension: 1 };
+            }
+        }
 
         if (!numerosConsulta.length && !numerosCatalogo.length) {
-            return { score: 1, mismatchFuerte: false };
+            return { score: 1, mismatchFuerte: false, exactitudDimension: dimensionesConsulta.length || dimensionesCatalogo.length ? 0.9 : 0 };
         }
         if (numerosConsulta.length && !numerosCatalogo.length) {
-            return { score: 0.35, mismatchFuerte: false };
+            return { score: 0.35, mismatchFuerte: false, exactitudDimension: 0 };
         }
         if (!numerosConsulta.length && numerosCatalogo.length) {
-            return { score: 0.82, mismatchFuerte: false };
+            return { score: 0.82, mismatchFuerte: false, exactitudDimension: 0 };
         }
 
         let coincidencias = 0;
@@ -3096,7 +3168,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const coberturaCatalogo = coincidencias / numerosCatalogo.length;
         const score = (coberturaConsulta * 0.65) + (coberturaCatalogo * 0.35);
         const mismatchFuerte = coincidencias === 0 && numerosConsulta.length > 0 && numerosCatalogo.length > 0;
-        return { score, mismatchFuerte };
+        const exactitudDimension = dimensionesConsulta.length && dimensionesCatalogo.length
+            ? dimensionesConsulta.filter(valor => dimensionesCatalogo.includes(valor)).length / Math.max(dimensionesConsulta.length, dimensionesCatalogo.length, 1)
+            : 0;
+        return { score, mismatchFuerte, exactitudDimension };
     }
 
     function obtenerAliasesAprendidosParaNombre(nombreCanonico) {
@@ -3210,8 +3285,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const contiene = varianteCatalogo.includes(consultaNormalizada) || consultaNormalizada.includes(varianteCatalogo) ? 1 : 0;
                 const distancia = calcularDistanciaLevenshtein(consultaNormalizada, varianteCatalogo);
                 const similitudTexto = 1 - (distancia / Math.max(consultaNormalizada.length, varianteCatalogo.length, 1));
-                const scoreBase = (coberturaConsulta * 0.38) + (coberturaCatalogo * 0.17) + (contiene * 0.15) + (Math.max(0, similitudTexto) * 0.1);
-                const score = scoreBase + (compatibilidadNumerica.score * 0.2);
+                const scoreBase = (coberturaConsulta * 0.34) + (coberturaCatalogo * 0.18) + (contiene * 0.16) + (Math.max(0, similitudTexto) * 0.08);
+                const bonusDimension = compatibilidadNumerica.exactitudDimension ? compatibilidadNumerica.exactitudDimension * 0.24 : 0;
+                const score = scoreBase + (compatibilidadNumerica.score * 0.2) + bonusDimension;
                 mejorScore = Math.max(mejorScore, score);
             });
         });
@@ -3271,7 +3347,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        if (!mejor || mejor.score < 0.62) return null;
+        if (!mejor || mejor.score < 0.68) return null;
         return mejor;
     }
 
@@ -3293,11 +3369,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        if (!mejor || mejor.score < 0.5) {
+        if (!mejor || mejor.score < 0.56) {
             return buscarCoincidenciaFlexibleMaterial(textoOCR, catalogo);
         }
 
-        if (segundo && (mejor.score - segundo.score) < 0.07 && mejor.score < 0.78) {
+        if (segundo && (mejor.score - segundo.score) < 0.09 && mejor.score < 0.82) {
             return buscarCoincidenciaFlexibleMaterial(textoOCR, catalogo) || null;
         }
 
@@ -3381,6 +3457,16 @@ document.addEventListener('DOMContentLoaded', function() {
         return candidatosCantidad[0];
     }
 
+    function aplicarMultiplicadorCantidad(valor, unidadTexto) {
+        let cantidad = parseFloat(String(valor).replace(',', '.'));
+        if (!isFinite(cantidad) || cantidad <= 0) return NaN;
+
+        const unidad = (unidadTexto || '').toUpperCase();
+        if (/DOCENA/.test(unidad)) cantidad *= 12;
+        if (/CIENTO/.test(unidad)) cantidad *= 100;
+        return cantidad;
+    }
+
     function extraerCantidadYDescripcion(linea) {
         let texto = limpiarLineaProformaOCR(linea);
 
@@ -3393,21 +3479,25 @@ document.addEventListener('DOMContentLoaded', function() {
         let descripcion = texto;
 
         const inicio = texto.match(/^(\d+(?:[.,]\d+)?)\s+(.*)$/);
-        const finalExplicito = texto.match(/^(.*?)(?:\s+[xX]\s*|\s*[=:,-]\s*)(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)?$/i);
+        const inicioConUnidad = texto.match(/^(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)\s+(.*)$/i);
+        const finalExplicito = texto.match(/^(.*?)(?:\s*[=:,-]\s*)(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)?$/i);
         const explicitoConUnidad = texto.match(/^(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)\s+(.*)$/i);
+        const finalConUnidad = texto.match(/^(.*[A-Za-zÁÉÍÓÚáéíóúÑñ0-9])\s+(\d+(?:[.,]\d+)?)\s*(UND|UNID|UNIDADES|UNIDAD|PZ|PZA|PZAS|CIENTO|CIENTOS|DOCENA|DOCENAS)$/i);
 
-        if (explicitoConUnidad && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(explicitoConUnidad[3])) {
-            cantidad = parseFloat(explicitoConUnidad[1].replace(',', '.'));
-            if (/DOCENA/i.test(explicitoConUnidad[2])) cantidad *= 12;
-            if (/CIENTO/i.test(explicitoConUnidad[2])) cantidad *= 100;
+        if (inicioConUnidad && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(inicioConUnidad[3])) {
+            cantidad = aplicarMultiplicadorCantidad(inicioConUnidad[1], inicioConUnidad[2]);
+            descripcion = inicioConUnidad[3].trim();
+        } else if (explicitoConUnidad && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(explicitoConUnidad[3])) {
+            cantidad = aplicarMultiplicadorCantidad(explicitoConUnidad[1], explicitoConUnidad[2]);
             descripcion = explicitoConUnidad[3].trim();
         } else if (inicio && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(inicio[2])) {
             cantidad = parseFloat(inicio[1].replace(',', '.'));
             descripcion = inicio[2].trim();
+        } else if (finalConUnidad && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(finalConUnidad[1])) {
+            cantidad = aplicarMultiplicadorCantidad(finalConUnidad[2], finalConUnidad[3]);
+            descripcion = finalConUnidad[1].trim();
         } else if (finalExplicito && /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(finalExplicito[1])) {
-            cantidad = parseFloat(finalExplicito[2].replace(',', '.'));
-            if (/DOCENA/i.test(finalExplicito[3] || '')) cantidad *= 12;
-            if (/CIENTO/i.test(finalExplicito[3] || '')) cantidad *= 100;
+            cantidad = aplicarMultiplicadorCantidad(finalExplicito[2], finalExplicito[3] || '');
             descripcion = finalExplicito[1].trim();
         }
 
@@ -3856,18 +3946,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const extraido = extraerCantidadYDescripcion(linea);
             if (!extraido) return;
 
-            const match = encontrarMejorCoincidenciaMaterial(extraido.descripcion, catalogo);
+            const matchExacto = buscarCoincidenciaExactaEnLinea(extraido.original, catalogo);
+            const match = matchExacto || encontrarMejorCoincidenciaMaterial(extraido.descripcion, catalogo);
             if (match && match.item && isFinite(match.item.precio) && match.item.precio > 0) {
+                const cantidadDetectada = matchExacto
+                    ? extraerCantidadDesdeLinea(extraido.original, match.item)
+                    : extraido.cantidad;
                 const necesitaSeleccion = Boolean(
-                    (match.score || 0) < 0.82 ||
+                    !matchExacto && (
+                        (match.score || 0) < 0.84 ||
                     match.flexible
+                    )
                 );
 
                 if (!necesitaSeleccion) {
                     agregados.push({
                         nombre: match.item.nombre,
                         precio: match.item.precio,
-                        cantidad: extraido.cantidad,
+                        cantidad: cantidadDetectada,
                         score: match.score,
                         origen: extraido.original
                     });
@@ -4026,20 +4122,101 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
+    function convertirNumerosHabladosATexto(texto) {
+        const unidades = {
+            cero: 0, un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9,
+            diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, dieciséis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19,
+            veinte: 20, veintiuno: 21, veintiun: 21, veintiún: 21, veintiuna: 21, veintidos: 22, veintidós: 22, veintitres: 23, veintitrés: 23,
+            veinticuatro: 24, veinticinco: 25, veintiseis: 26, veintiséis: 26, veintisiete: 27, veintiocho: 28, veintinueve: 29
+        };
+        const decenas = {
+            treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90
+        };
+        const centenas = {
+            cien: 100, ciento: 100, doscientos: 200, trescientos: 300, cuatrocientos: 400, quinientos: 500,
+            seiscientos: 600, setecientos: 700, ochocientos: 800, novecientos: 900
+        };
+
+        const tokens = String(texto || '').split(/\s+/).filter(Boolean);
+        const resultado = [];
+
+        for (let i = 0; i < tokens.length; i += 1) {
+            const limpio = tokens[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[.,;:]/g, '');
+            if (!(limpio in unidades) && !(limpio in decenas) && !(limpio in centenas)) {
+                resultado.push(tokens[i]);
+                continue;
+            }
+
+            let valor = 0;
+            let consumidos = 0;
+            let j = i;
+
+            while (j < tokens.length) {
+                const actual = tokens[j].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[.,;:]/g, '');
+                if (actual in centenas) {
+                    valor += centenas[actual];
+                    consumidos += 1;
+                    j += 1;
+                    continue;
+                }
+                if (actual in decenas) {
+                    valor += decenas[actual];
+                    consumidos += 1;
+                    j += 1;
+                    if (j < tokens.length) {
+                        const siguiente = tokens[j].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[.,;:]/g, '');
+                        if (siguiente === 'y') {
+                            consumidos += 1;
+                            j += 1;
+                            const despues = j < tokens.length ? tokens[j].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[.,;:]/g, '') : '';
+                            if (despues in unidades && unidades[despues] < 10) {
+                                valor += unidades[despues];
+                                consumidos += 1;
+                                j += 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                if (actual in unidades) {
+                    valor += unidades[actual];
+                    consumidos += 1;
+                    j += 1;
+                    continue;
+                }
+                break;
+            }
+
+            if (consumidos > 0) {
+                resultado.push(String(valor));
+                i = j - 1;
+            } else {
+                resultado.push(tokens[i]);
+            }
+        }
+
+        return resultado.join(' ');
+    }
+
     function normalizarTextoDictado(texto) {
-        return (texto || '')
-            .replace(/\bcoma\b/gi, ',')
-            .replace(/\bpunto\b/gi, '.')
+        const base = convertirNumerosHabladosATexto(
+            String(texto || '')
+                .replace(/\bcoma\b/gi, ',')
+                .replace(/\bpunto\b/gi, '.')
+                .replace(/\bguion\b/gi, '-')
+                .replace(/\bdoble u\b/gi, 'W')
+                .replace(/\bequis\b/gi, ' x ')
+                .replace(/\bpor\b/gi, ' x ')
+                .replace(/×/g, ' x ')
+        );
+
+        return base
             .replace(/\bm[aá]s\b/gi, '\n')
             .replace(/\bluego\b/gi, '\n')
             .replace(/\bsiguiente\b/gi, '\n')
             .replace(/\bcantidad\b/gi, ' ')
             .replace(/\bunidades\b/gi, ' ')
             .replace(/\bunidad\b/gi, ' ')
-            .replace(/\bguion\b/gi, '-')
-            .replace(/\bdoble u\b/gi, 'W')
-            .replace(/\bequis\b/gi, ' x ')
-            .replace(/\bpor\b/gi, ' x ')
             .replace(/\s+y\s+(?=\d)/gi, '\n')
             .replace(/\s*,\s*/g, '\n')
             .replace(/\s*;\s*/g, '\n')
@@ -4091,7 +4268,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const textoNormalizado = origen === 'voz' ? normalizarTextoDictado(textoFuente) : textoFuente;
         const procesado = await procesarTextoOCRMaterialesConIA(textoNormalizado, catalogo, origen);
-        if (origen === 'imagen') {
+        if (origen === 'imagen' || origen === 'texto') {
             mostrarModalRevisionOCR(procesado, origen);
             return;
         }
