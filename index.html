@@ -895,7 +895,7 @@
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%;">
                                     <label for="cantidad" style="font-size: 15px; font-weight: bold; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 6px rgba(255,255,255,0.8);">CANT.</label>
-                                    <input type="number" id="cantidad" placeholder="Cant." min="1" value="1" style="width: 65px; font-size: 16px; text-align: center; margin-bottom: 0;">
+                                    <input type="number" id="cantidad" placeholder="Cant." min="0.01" step="0.01" value="1" style="width: 65px; font-size: 16px; text-align: center; margin-bottom: 0;">
                                     <div id="cantidad-scrollbar" title="Use la rueda del ratón o deslice para cambiar la cantidad"></div>
                                 </div>
                             </div>
@@ -4391,22 +4391,51 @@ document.addEventListener('DOMContentLoaded', function() {
         reconocimientoVozMateriales.start();
     }
 
+    function parseCantidadFlexible(valor) {
+        if (typeof valor === 'number') {
+            return isFinite(valor) ? valor : NaN;
+        }
+        const limpio = String(valor || '')
+            .trim()
+            .replace(/\s+/g, '')
+            .replace(',', '.')
+            .replace(/[^0-9.\-]/g, '');
+        const numero = parseFloat(limpio);
+        return isFinite(numero) ? numero : NaN;
+    }
+
+    function normalizarCantidadDecimal(valor) {
+        const numero = parseCantidadFlexible(valor);
+        if (!isFinite(numero)) return NaN;
+        return Math.round(numero * 1000000) / 1000000;
+    }
+
+    function formatearCantidad(valor) {
+        const numero = normalizarCantidadDecimal(valor);
+        if (!isFinite(numero)) return '0';
+        return numero.toLocaleString('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 6,
+            useGrouping: false
+        });
+    }
+
     function agregarProductoDesdeDatos(nombreProducto, precio, cantidad, textoOrigen) {
         if (!nombreProducto || !isFinite(precio) || !isFinite(cantidad) || cantidad <= 0) {
             return false;
         }
 
         const table = document.querySelector("table");
-        const cantidadNormalizada = Math.round(cantidad * 100) / 100;
+        const cantidadNormalizada = normalizarCantidadDecimal(cantidad);
         const filaExistente = Array.from(table.rows).slice(1).find(row => row.cells[0] && row.cells[0].textContent.trim() === nombreProducto);
 
         if (filaExistente) {
-            const cantidadActual = parseFloat(filaExistente.cells[1].textContent) || 0;
-            const nuevaCantidad = cantidadActual + cantidadNormalizada;
+            const cantidadActual = parseCantidadFlexible(filaExistente.cells[1].textContent) || 0;
+            const nuevaCantidad = normalizarCantidadDecimal(cantidadActual + cantidadNormalizada);
             if (textoOrigen) {
                 filaExistente.dataset.learnSource = filaExistente.dataset.learnSource || textoOrigen;
             }
-            filaExistente.cells[1].innerHTML = nuevaCantidad;
+            filaExistente.cells[1].innerHTML = formatearCantidad(cantidadActual + cantidadNormalizada);
             filaExistente.cells[2].innerHTML = "$" + precio.toFixed(2);
             filaExistente.cells[3].innerHTML = "$" + (precio * nuevaCantidad).toFixed(2);
             filaExistente.cells[0].title = nombreProducto;
@@ -4438,7 +4467,7 @@ document.addEventListener('DOMContentLoaded', function() {
         cell1.dataset.price = precio;
         cell1.dataset.qty = cantidadNormalizada;
 
-        cell2.innerHTML = cantidadNormalizada;
+        cell2.innerHTML = formatearCantidad(cantidadNormalizada);
         cell2.className = 'editable-cell';
         cell2.dataset.originalName = nombreProducto;
 
@@ -4495,7 +4524,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function agregarProducto() {
         var nombreProducto = document.getElementById("nombreProducto").value;
         var precio = parseFloat(document.getElementById("precioProducto").value);
-        var cantidad = parseInt(document.getElementById("cantidad").value, 10);
+        var cantidad = parseCantidadFlexible(document.getElementById("cantidad").value);
         const catalogo = construirCatalogoMateriales();
         const canonico = inferirNombreCanonico(nombreProducto, catalogo);
         if (canonico && normalizarTextoMaterial(canonico) !== normalizarTextoMaterial(nombreProducto)) {
@@ -4527,8 +4556,9 @@ document.addEventListener('DOMContentLoaded', function() {
             input.style.width = '150%';
         } else if (tipo === 'cantidad') {
             input.type = 'number';
-            input.min = '1';
-            input.value = parseInt(valorActual) || 1;
+            input.min = '0.01';
+            input.step = '0.01';
+            input.value = formatearCantidad(valorActual);
             input.style.width = '200%';
         } else if (tipo === 'precio') {
             input.type = 'number';
@@ -4558,7 +4588,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const celdaSubtotal = row.cells[3];
             
             let nombre = celdaNombre.textContent || celdaNombre.querySelector('input')?.value;
-            let cantidad = parseInt(celdaCant.textContent || celdaCant.querySelector('input')?.value);
+            let cantidad = parseCantidadFlexible(celdaCant.textContent || celdaCant.querySelector('input')?.value);
             let precio = parseFloat((celdaPrecio.textContent || celdaPrecio.querySelector('input')?.value).replace('$', ''));
             
             // Actualizar según el tipo
@@ -4577,8 +4607,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             } else if (tipo === 'cantidad') {
-                cantidad = parseInt(nuevoValor);
-                celda.textContent = cantidad;
+                cantidad = normalizarCantidadDecimal(nuevoValor);
+                if (!isFinite(cantidad) || cantidad <= 0) {
+                    celda.textContent = formatearCantidad(valorActual);
+                    return;
+                }
+                celda.textContent = formatearCantidad(cantidad);
             } else if (tipo === 'precio') {
                 precio = parseFloat(nuevoValor);
                 celda.textContent = '$' + precio.toFixed(2);
@@ -4620,7 +4654,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Insertar los inputs con tamaños completos y visibles
         row.cells[0].innerHTML = `<input type="text" value="${nombreOriginal}" class="editing-input">`;
-        row.cells[1].innerHTML = `<input type="number" value="${cantidadOriginal}" min="1" class="editing-input">`;
+        row.cells[1].innerHTML = `<input type="number" value="${formatearCantidad(cantidadOriginal)}" min="0.01" step="0.01" class="editing-input">`;
         row.cells[2].innerHTML = `<input type="number" value="${precioOriginal.toFixed(2)}" step="0.01" class="editing-input">`;
         
         // Poner el foco en el primer input para una edición rápida
@@ -4644,10 +4678,10 @@ document.addEventListener('DOMContentLoaded', function() {
     function actualizarProducto(btn, nombreOriginal) {
         var row = btn.parentNode.parentNode;
         var nombreProducto = row.cells[0].querySelector('input').value;
-        var cantidad = parseInt(row.cells[1].querySelector('input').value);
+        var cantidad = normalizarCantidadDecimal(row.cells[1].querySelector('input').value);
         var precio = parseFloat(row.cells[2].querySelector('input').value);
 
-        if (nombreProducto && !isNaN(cantidad) && !isNaN(precio)) {
+        if (nombreProducto && !isNaN(cantidad) && cantidad > 0 && !isNaN(precio)) {
             const catalogo = construirCatalogoMateriales();
             const canonico = inferirNombreCanonico(nombreProducto, catalogo);
             const origenAprendizaje = row.dataset.learnSource || nombreOriginal;
@@ -4665,7 +4699,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var subtotal = precio * cantidad;
 
             row.cells[0].innerHTML = nombreProducto;
-            row.cells[1].innerHTML = cantidad;
+            row.cells[1].innerHTML = formatearCantidad(cantidad);
             row.cells[2].innerHTML = "$" + precio.toFixed(2);
             row.cells[3].innerHTML = "$" + subtotal.toFixed(2);
 
@@ -5171,7 +5205,7 @@ function cargarProformaEnPagina(html) {
         const celdas = filas[i].querySelectorAll('td');
         if (celdas.length >= 4) {
             const nombre = celdas[0].innerText;
-            const cantidad = parseInt(celdas[1].innerText);
+            const cantidad = normalizarCantidadDecimal(celdas[1].innerText);
             const precio = parseFloat(celdas[2].innerText.replace('$',''));
             
             // Agregar al objeto productos
@@ -5193,7 +5227,7 @@ function cargarProformaEnPagina(html) {
             cell1.dataset.price = precio;
             cell1.dataset.qty = cantidad;
             
-            cell2.innerHTML = cantidad;
+            cell2.innerHTML = formatearCantidad(cantidad);
             cell2.className = 'editable-cell';
             cell2.dataset.originalName = nombre;
             
@@ -5271,7 +5305,7 @@ function cargarProformaEnPagina(html) {
                 var row = this.parentNode.parentNode;
                 var nombreProducto = row.cells[0].innerText;
                 var precio = parseFloat(row.cells[2].innerText.substring(1));
-                var cantidad = parseInt(row.cells[1].innerText);
+                var cantidad = normalizarCantidadDecimal(row.cells[1].innerText);
                 editarProducto(row, nombreProducto, precio, cantidad);
             };
         });
