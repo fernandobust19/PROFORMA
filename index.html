@@ -641,6 +641,17 @@
             text-overflow: ellipsis;
         }
 
+        button.top-quoted-product-chip {
+            cursor: pointer;
+            transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        button.top-quoted-product-chip:hover {
+            background: rgba(160,216,239,0.3);
+            box-shadow: 0 3px 8px rgba(20,95,140,0.12);
+            transform: translateY(-1px);
+        }
+
         .top-quoted-products:empty {
             display: none;
         }
@@ -3027,7 +3038,7 @@ document.addEventListener('DOMContentLoaded', function() {
         contenedor.innerHTML =
             '<span class="top-quoted-products-label">Más cotizados:</span>' +
             topProductos
-                .map(item => `<span class="top-quoted-product-chip" title="${item.nombre} (${item.conteo})">${item.nombre}</span>`)
+                .map(item => `<button type="button" class="top-quoted-product-chip" title="${item.nombre} (${item.conteo})" onclick="abrirModalProductoCotizado('${item.nombre.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">${item.nombre}</button>`)
                 .join('');
     }
 
@@ -3043,6 +3054,78 @@ document.addEventListener('DOMContentLoaded', function() {
 
         guardarRankingProductosCotizados(ranking);
         renderizarTopProductosCotizados();
+    }
+
+    function cerrarModalProductoCotizado() {
+        const modal = document.getElementById('top-quoted-product-modal');
+        if (modal) modal.remove();
+    }
+
+    function abrirModalProductoCotizado(nombreProducto) {
+        cerrarModalProductoCotizado();
+
+        const catalogo = construirCatalogoMateriales();
+        const item = catalogo.find(entry => entry.nombre === nombreProducto);
+        if (!item || !isFinite(item.precio) || item.precio <= 0) {
+            alert('No se encontró el producto en la base actual.');
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'top-quoted-product-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.28);z-index:14500;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:14px;width:min(360px,92vw);padding:14px 14px 12px;box-shadow:0 12px 32px rgba(0,0,0,.22);animation:popIn 220ms cubic-bezier(.2,1.1,.3,1) forwards;';
+        box.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+                <div style="min-width:0;">
+                    <div style="font-size:14px;font-weight:800;color:#102035;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.nombre}</div>
+                    <div style="font-size:12px;color:#5b6b7c;">Precio: $${item.precio.toFixed(2)}</div>
+                </div>
+                <button id="top-quoted-close" class="proforma-action-btn" style="background:#e74c3c;color:#fff;padding:4px 10px;">Cerrar</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <label for="top-quoted-qty" style="font-size:12px;font-weight:700;color:#32495f;">Cantidad</label>
+                <input type="number" id="top-quoted-qty" min="0.01" step="0.01" value="1" style="font-size:16px;padding:8px 10px;border:1px solid rgba(20,184,255,0.35);border-radius:10px;">
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+                <button id="top-quoted-cancel" class="proforma-action-btn" style="background:#6c757d;color:#fff;">Cancelar</button>
+                <button id="top-quoted-add" class="proforma-action-btn btn-verde">Agregar</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const inputQty = box.querySelector('#top-quoted-qty');
+        const cerrar = () => cerrarModalProductoCotizado();
+
+        box.querySelector('#top-quoted-close').onclick = cerrar;
+        box.querySelector('#top-quoted-cancel').onclick = cerrar;
+        overlay.onclick = function(event) {
+            if (event.target === overlay) cerrar();
+        };
+
+        box.querySelector('#top-quoted-add').onclick = function() {
+            const cantidad = parseCantidadFlexible(inputQty.value);
+            if (!isFinite(cantidad) || cantidad <= 0) {
+                inputQty.focus();
+                inputQty.select();
+                return;
+            }
+
+            agregarProductoDesdeDatos(item.nombre, item.precio, cantidad, 'top_cotizados');
+            cerrar();
+        };
+
+        inputQty.focus();
+        inputQty.select();
+        inputQty.onkeydown = function(event) {
+            if (event.key === 'Enter') {
+                box.querySelector('#top-quoted-add').click();
+            }
+        };
     }
 
     function limitarPosicionBotonVoz(posicion, boton) {
