@@ -555,6 +555,59 @@
             letter-spacing: 0.1px;
         }
 
+        .voice-floating-btn {
+            position: fixed;
+            left: 16px;
+            top: 140px;
+            z-index: 10001;
+            width: 88px;
+            min-height: 68px;
+            padding: 8px 10px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.65);
+            background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(160,216,239,0.9));
+            color: #0f2940;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.85),
+                0 10px 22px rgba(20,95,140,0.18),
+                0 0 0 1px rgba(255,255,255,0.25);
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+        }
+
+        .voice-floating-btn span {
+            display: block;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: 0.2px;
+        }
+
+        .voice-floating-btn:hover {
+            transform: translateY(-1px) scale(1.02);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.9),
+                0 12px 24px rgba(20,95,140,0.22),
+                0 0 18px rgba(160,216,239,0.24);
+        }
+
+        .voice-floating-btn:active,
+        .voice-floating-btn.dragging {
+            cursor: grabbing;
+            transform: scale(0.98);
+            box-shadow:
+                inset 0 3px 8px rgba(0,0,0,0.14),
+                0 6px 16px rgba(20,95,140,0.18);
+        }
+
         .glass-action-btn:hover {
             background: linear-gradient(180deg, rgba(255,255,255,0.68), rgba(103,184,222,0.3));
             box-shadow:
@@ -586,6 +639,16 @@
 
             .glass-action-btn span {
                 font-size: 5px;
+            }
+
+            .voice-floating-btn {
+                width: 78px;
+                min-height: 60px;
+                padding: 7px 8px;
+            }
+
+            .voice-floating-btn span {
+                font-size: 10px;
             }
         }
 
@@ -905,14 +968,11 @@
                             </div>
                             <div class="proforma-main-actions-container">
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
-                                <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()" title="Importar por imagen" aria-label="Importar por imagen">📷<span>Imagen</span></button>
-                                <button class="proforma-action-btn glass-action-btn" id="voice-materials-btn" onclick="iniciarDictadoMateriales()" title="Dictar materiales" aria-label="Dictar materiales">🎤<span>Voz</span></button>
-                                <button class="proforma-action-btn glass-action-btn" onclick="abrirModalTextoMateriales()" title="Pegar lista de materiales" aria-label="Pegar lista de materiales">📝<span>Texto</span></button>
-                                <button class="proforma-action-btn glass-action-btn" onclick="abrirConfiguracionGoogleAI()" title="Configurar IA de Google" aria-label="Configurar IA de Google">✨<span>IA</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarListaMateriales()" title="Ver materiales" aria-label="Ver materiales">📋<span>Materiales</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
                             </div>
+                            <button id="voice-materials-btn" class="voice-floating-btn" onclick="iniciarDictadoMateriales()" title="Dictar materiales. Puedes arrastrar este botón.">🎤<span>Voz</span></button>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
                                     <img src="logo.png" alt="Up-cons logo" style="height:50px;vertical-align:middle;display:inline-block;">
@@ -2342,6 +2402,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    inicializarBotonVozFlotante();
+    actualizarBotonVozMateriales();
 });
   // otras funciones...
 
@@ -2831,11 +2893,162 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const OCR_LEARNING_STORAGE_KEY = 'ocr_material_learning_v2';
     const GOOGLE_AI_STORAGE_KEY = 'google_ai_material_config_v1';
+    const VOICE_BUTTON_POSITION_KEY = 'voice_materials_button_position_v1';
     let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
     let googleAIConfig = cargarGoogleAIConfig();
     let reconocimientoVozMateriales = null;
     let reconocimientoVozActivo = false;
     let modoImportacionImagen = 'lista_cliente';
+    let botonVozFueArrastrado = false;
+
+    function cargarPosicionBotonVoz() {
+        try {
+            const raw = localStorage.getItem(VOICE_BUTTON_POSITION_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed.left !== 'number' || typeof parsed.top !== 'number') return null;
+            return parsed;
+        } catch (error) {
+            console.error('No se pudo cargar la posicion del boton de voz:', error);
+            return null;
+        }
+    }
+
+    function guardarPosicionBotonVoz(posicion) {
+        try {
+            localStorage.setItem(VOICE_BUTTON_POSITION_KEY, JSON.stringify(posicion));
+        } catch (error) {
+            console.error('No se pudo guardar la posicion del boton de voz:', error);
+        }
+    }
+
+    function limitarPosicionBotonVoz(posicion, boton) {
+        const margen = 12;
+        const ancho = boton ? boton.offsetWidth || 88 : 88;
+        const alto = boton ? boton.offsetHeight || 68 : 68;
+        return {
+            left: Math.max(margen, Math.min(window.innerWidth - ancho - margen, posicion.left)),
+            top: Math.max(margen, Math.min(window.innerHeight - alto - margen, posicion.top))
+        };
+    }
+
+    function calcularPosicionAutomaticaBotonVoz() {
+        const boton = document.getElementById('voice-materials-btn');
+        const cantidad = document.getElementById('cantidad');
+        const proforma = document.getElementById('proforma');
+
+        let left = 16;
+        let top = 140;
+
+        if (cantidad) {
+            const rect = cantidad.getBoundingClientRect();
+            left = rect.left;
+            top = rect.bottom + 12;
+        } else if (proforma) {
+            const rect = proforma.getBoundingClientRect();
+            left = rect.left + 8;
+            top = rect.top + 12;
+        }
+
+        return limitarPosicionBotonVoz({ left, top }, boton);
+    }
+
+    function posicionarBotonVoz(segunPreferenciaUsuario) {
+        const boton = document.getElementById('voice-materials-btn');
+        if (!boton) return;
+        const posicionGuardada = segunPreferenciaUsuario ? cargarPosicionBotonVoz() : null;
+        const posicionFinal = posicionGuardada && posicionGuardada.manual
+            ? limitarPosicionBotonVoz(posicionGuardada, boton)
+            : calcularPosicionAutomaticaBotonVoz();
+
+        boton.style.left = posicionFinal.left + 'px';
+        boton.style.top = posicionFinal.top + 'px';
+    }
+
+    function inicializarBotonVozFlotante() {
+        const boton = document.getElementById('voice-materials-btn');
+        if (!boton || boton.dataset.initialized === 'true') return;
+        boton.dataset.initialized = 'true';
+
+        posicionarBotonVoz(true);
+
+        let pointerIdActivo = null;
+        let inicioX = 0;
+        let inicioY = 0;
+        let inicioLeft = 0;
+        let inicioTop = 0;
+        let seArrastro = false;
+
+        boton.addEventListener('pointerdown', function(event) {
+            pointerIdActivo = event.pointerId;
+            inicioX = event.clientX;
+            inicioY = event.clientY;
+            inicioLeft = parseFloat(boton.style.left) || boton.getBoundingClientRect().left;
+            inicioTop = parseFloat(boton.style.top) || boton.getBoundingClientRect().top;
+            seArrastro = false;
+            boton.classList.add('dragging');
+            boton.setPointerCapture(pointerIdActivo);
+        });
+
+        boton.addEventListener('pointermove', function(event) {
+            if (pointerIdActivo !== event.pointerId) return;
+            const deltaX = event.clientX - inicioX;
+            const deltaY = event.clientY - inicioY;
+
+            if (!seArrastro && (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4)) {
+                seArrastro = true;
+            }
+
+            if (!seArrastro) return;
+
+            const nuevaPosicion = limitarPosicionBotonVoz({
+                left: inicioLeft + deltaX,
+                top: inicioTop + deltaY
+            }, boton);
+
+            boton.style.left = nuevaPosicion.left + 'px';
+            boton.style.top = nuevaPosicion.top + 'px';
+        });
+
+        function finalizarArrastre(event) {
+            if (pointerIdActivo !== event.pointerId) return;
+
+            if (seArrastro) {
+                const posicionManual = {
+                    left: parseFloat(boton.style.left) || 0,
+                    top: parseFloat(boton.style.top) || 0,
+                    manual: true
+                };
+                guardarPosicionBotonVoz(posicionManual);
+                botonVozFueArrastrado = true;
+                setTimeout(() => {
+                    botonVozFueArrastrado = false;
+                }, 150);
+            }
+
+            boton.classList.remove('dragging');
+            boton.releasePointerCapture(pointerIdActivo);
+            pointerIdActivo = null;
+        }
+
+        boton.addEventListener('pointerup', finalizarArrastre);
+        boton.addEventListener('pointercancel', finalizarArrastre);
+        boton.addEventListener('click', function(event) {
+            if (!botonVozFueArrastrado) return;
+            event.preventDefault();
+            event.stopPropagation();
+        }, true);
+
+        window.addEventListener('resize', function() {
+            posicionarBotonVoz(true);
+        });
+
+        window.addEventListener('scroll', function() {
+            const posicionGuardada = cargarPosicionBotonVoz();
+            if (posicionGuardada && posicionGuardada.manual) return;
+            posicionarBotonVoz(false);
+        }, { passive: true });
+    }
 
     function cargarBaseAprendizajeMateriales() {
         try {
@@ -4373,9 +4586,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!btn) return;
         btn.innerHTML = reconocimientoVozActivo ? '🛑<span>Detener</span>' : '🎤<span>Voz</span>';
         btn.style.background = reconocimientoVozActivo
-            ? 'linear-gradient(180deg, rgba(255,161,140,0.88), rgba(229,57,53,0.76))'
-            : 'linear-gradient(180deg, rgba(255,255,255,0.52), rgba(160,216,239,0.24))';
+            ? 'linear-gradient(180deg, rgba(255,161,140,0.96), rgba(229,57,53,0.84))'
+            : 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(160,216,239,0.9))';
         btn.style.color = reconocimientoVozActivo ? '#fff' : '#0f2940';
+        btn.style.boxShadow = reconocimientoVozActivo
+            ? 'inset 0 1px 0 rgba(255,255,255,0.3), 0 12px 24px rgba(229,57,53,0.25), 0 0 18px rgba(255,111,97,0.24)'
+            : '';
     }
 
     function iniciarDictadoMateriales() {
