@@ -608,6 +608,43 @@
                 0 6px 16px rgba(20,95,140,0.18);
         }
 
+        .top-quoted-products {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 6px;
+            align-items: center;
+            min-height: 16px;
+        }
+
+        .top-quoted-products-label {
+            font-size: 8px;
+            font-weight: 700;
+            color: #6a7a88;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+        }
+
+        .top-quoted-product-chip {
+            display: inline-flex;
+            align-items: center;
+            max-width: 118px;
+            padding: 1px 5px;
+            border-radius: 999px;
+            background: rgba(160,216,239,0.18);
+            border: 1px solid rgba(160,216,239,0.3);
+            font-size: 8px;
+            line-height: 1.15;
+            color: #42586d;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-quoted-products:empty {
+            display: none;
+        }
+
         .glass-action-btn:hover {
             background: linear-gradient(180deg, rgba(255,255,255,0.68), rgba(103,184,222,0.3));
             box-shadow:
@@ -649,6 +686,11 @@
 
             .voice-floating-btn span {
                 font-size: 8px;
+            }
+
+            .top-quoted-products-label,
+            .top-quoted-product-chip {
+                font-size: 7px;
             }
         }
 
@@ -972,6 +1014,7 @@
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
                             </div>
+                            <div id="top-quoted-products" class="top-quoted-products"></div>
                             <button id="voice-materials-btn" class="voice-floating-btn" onclick="iniciarDictadoMateriales()" title="Dictar materiales. Puedes arrastrar este botón.">🎤<span>Voz</span></button>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
@@ -2415,6 +2458,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     inicializarBotonVozFlotante();
     actualizarBotonVozMateriales();
+    renderizarTopProductosCotizados();
 });
   // otras funciones...
 
@@ -2905,6 +2949,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const OCR_LEARNING_STORAGE_KEY = 'ocr_material_learning_v2';
     const GOOGLE_AI_STORAGE_KEY = 'google_ai_material_config_v1';
     const VOICE_BUTTON_POSITION_KEY = 'voice_materials_button_position_v1';
+    const TOP_QUOTED_PRODUCTS_STORAGE_KEY = 'top_quoted_products_v1';
     let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
     let googleAIConfig = cargarGoogleAIConfig();
     let reconocimientoVozMateriales = null;
@@ -2933,6 +2978,73 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function cargarRankingProductosCotizados() {
+        try {
+            const raw = localStorage.getItem(TOP_QUOTED_PRODUCTS_STORAGE_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+            console.error('No se pudo cargar el ranking de productos cotizados:', error);
+            return {};
+        }
+    }
+
+    function guardarRankingProductosCotizados(ranking) {
+        try {
+            localStorage.setItem(TOP_QUOTED_PRODUCTS_STORAGE_KEY, JSON.stringify(ranking));
+        } catch (error) {
+            console.error('No se pudo guardar el ranking de productos cotizados:', error);
+        }
+    }
+
+    function obtenerTopProductosCotizados(limit = 10) {
+        const ranking = cargarRankingProductosCotizados();
+        return Object.entries(ranking)
+            .map(([nombre, data]) => ({
+                nombre,
+                conteo: data && isFinite(data.count) ? data.count : 0,
+                ultimoUso: data && data.lastUsed ? data.lastUsed : ''
+            }))
+            .filter(item => item.nombre && item.conteo > 0)
+            .sort((a, b) => {
+                if (b.conteo !== a.conteo) return b.conteo - a.conteo;
+                return String(b.ultimoUso).localeCompare(String(a.ultimoUso));
+            })
+            .slice(0, limit);
+    }
+
+    function renderizarTopProductosCotizados() {
+        const contenedor = document.getElementById('top-quoted-products');
+        if (!contenedor) return;
+
+        const topProductos = obtenerTopProductosCotizados(10);
+        if (!topProductos.length) {
+            contenedor.innerHTML = '';
+            return;
+        }
+
+        contenedor.innerHTML =
+            '<span class="top-quoted-products-label">Más cotizados:</span>' +
+            topProductos
+                .map(item => `<span class="top-quoted-product-chip" title="${item.nombre} (${item.conteo})">${item.nombre}</span>`)
+                .join('');
+    }
+
+    function registrarProductoCotizado(nombreProducto) {
+        const nombre = String(nombreProducto || '').trim();
+        if (!nombre) return;
+
+        const ranking = cargarRankingProductosCotizados();
+        const actual = ranking[nombre] || { count: 0, lastUsed: '' };
+        actual.count = (isFinite(actual.count) ? actual.count : 0) + 1;
+        actual.lastUsed = new Date().toISOString();
+        ranking[nombre] = actual;
+
+        guardarRankingProductosCotizados(ranking);
+        renderizarTopProductosCotizados();
+    }
+
     function limitarPosicionBotonVoz(posicion, boton) {
         const margen = 12;
         const ancho = boton ? boton.offsetWidth || 88 : 88;
@@ -2945,23 +3057,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function calcularPosicionAutomaticaBotonVoz() {
         const boton = document.getElementById('voice-materials-btn');
-        const botonGuardar = document.querySelector('button[onclick="mostrarModalNombreArchivo()"]');
-        const proforma = document.getElementById('proforma');
-
-        let left = 16;
-        let top = 140;
-
-        if (botonGuardar) {
-            const rect = botonGuardar.getBoundingClientRect();
-            left = rect.left;
-            top = rect.bottom + 12;
-        } else if (proforma) {
-            const rect = proforma.getBoundingClientRect();
-            left = rect.left + 8;
-            top = rect.top + 12;
-        }
-
-        return limitarPosicionBotonVoz({ left, top }, boton);
+        const margen = 16;
+        const altoBoton = boton ? boton.offsetHeight || 50 : 50;
+        return limitarPosicionBotonVoz({
+            left: margen,
+            top: window.innerHeight - altoBoton - margen
+        }, boton);
     }
 
     function posicionarBotonVoz(segunPreferenciaUsuario) {
@@ -3338,9 +3439,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function generarVariantesMaterial(texto, aliases = []) {
         const base = normalizarTextoMaterial(texto);
+        const baseFlexible = normalizarTextoMaterialFlexible(texto);
         const variantes = new Set();
 
-        [base, ...aliases.map(alias => normalizarTextoMaterial(alias))].forEach(valor => {
+        [
+            base,
+            baseFlexible,
+            ...aliases.flatMap(alias => [normalizarTextoMaterial(alias), normalizarTextoMaterialFlexible(alias)])
+        ].forEach(valor => {
             if (!valor) return;
             generarVariantesDimension(valor).forEach(variant => variantes.add(variant));
         });
@@ -3350,7 +3456,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function obtenerTokensMaterial(texto) {
         const stopwords = new Set(['DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'POR', 'PARA', 'CON', 'SIN', 'UND', 'UN', 'UNA', 'UNIDAD', 'UNIDADES']);
-        return normalizarTextoMaterial(texto)
+        return normalizarTextoMaterialFlexible(texto)
             .split(' ')
             .filter(token => token && !stopwords.has(token));
     }
@@ -3677,10 +3783,30 @@ document.addEventListener('DOMContentLoaded', function() {
             .trim();
     }
 
+    function singularizarTokenMaterial(token) {
+        const valor = String(token || '').trim();
+        if (!valor || valor.length <= 3) return valor;
+        if (!/^[A-Z]+$/.test(valor)) return valor;
+        if (['PULG', 'MM', 'CM', 'UND', 'UNID', 'PZA', 'PZAS', 'CIENTO', 'DOCENA'].includes(valor)) return valor;
+        if (/CES$/.test(valor) && valor.length > 4) return valor.replace(/CES$/, 'Z');
+        if (/[BCDFGHJKLMNÑPQRSTVWXYZ]ES$/.test(valor) && valor.length > 4) return valor.replace(/ES$/, '');
+        if (/S$/.test(valor) && !/(IS|US|SS)$/.test(valor) && valor.length > 4) return valor.slice(0, -1);
+        return valor;
+    }
+
+    function normalizarTextoMaterialFlexible(texto) {
+        return normalizarTextoMaterial(texto)
+            .split(' ')
+            .map(singularizarTokenMaterial)
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+    }
+
     function buscarCoincidenciaExactaEnLinea(linea, catalogo) {
         const limpia = limpiarLineaProformaOCR(linea);
-        const normalizada = normalizarTextoMaterial(limpia);
-        if (!normalizada) return null;
+        const variantesConsulta = generarVariantesMaterial(limpia);
+        if (!variantesConsulta.length) return null;
 
         let mejor = null;
 
@@ -3688,19 +3814,22 @@ document.addEventListener('DOMContentLoaded', function() {
             const variantes = item.variantes || [item.normalizado];
             variantes.forEach(variante => {
                 if (!variante) return;
-                if (normalizada === variante) {
-                    mejor = { item, score: 1, exacta: true };
-                    return;
-                }
-                if (normalizada.includes(variante) || variante.includes(normalizada)) {
-                    const proporcion = Math.min(normalizada.length, variante.length) / Math.max(normalizada.length, variante.length);
-                    if (proporcion >= 0.72) {
-                        const score = 0.9 + (proporcion * 0.08);
-                        if (!mejor || score > mejor.score) {
-                            mejor = { item, score, exacta: true };
+                variantesConsulta.forEach(consulta => {
+                    if (!consulta) return;
+                    if (consulta === variante) {
+                        mejor = { item, score: 1, exacta: true };
+                        return;
+                    }
+                    if (consulta.includes(variante) || variante.includes(consulta)) {
+                        const proporcion = Math.min(consulta.length, variante.length) / Math.max(consulta.length, variante.length);
+                        if (proporcion >= 0.72) {
+                            const score = 0.9 + (proporcion * 0.08);
+                            if (!mejor || score > mejor.score) {
+                                mejor = { item, score, exacta: true };
+                            }
                         }
                     }
-                }
+                });
             });
         });
 
@@ -3769,6 +3898,8 @@ document.addEventListener('DOMContentLoaded', function() {
             cantidad = aplicarMultiplicadorCantidad(finalExplicito[2], finalExplicito[3] || '');
             descripcion = finalExplicito[1].trim();
         }
+
+        descripcion = descripcion.replace(/^(DE|DEL)\s+/i, '').trim();
 
         if (!descripcion || !isFinite(cantidad) || cantidad <= 0) return null;
         return { cantidad, descripcion, original: texto };
@@ -4118,19 +4249,13 @@ document.addEventListener('DOMContentLoaded', function() {
             ? resultado.agregados.map(item => `• ${item.nombre} x ${item.cantidad}`).join('\n')
             : '• No se agregó ningún material';
 
-        const omitidosTexto = resultado.omitidos.length
-            ? resultado.omitidos.map(item => `• ${item}`).join('\n')
-            : '• No hubo líneas omitidas';
-
         const agregadosDetalle = resultado.agregados.length
             ? '\n' + resultado.agregados.map(item => `  coincidencia ${Math.round((item.score || 0) * 100)}%`).join('\n')
             : '';
 
         alert(
             'Importación de materiales terminada.\n\n' +
-            `Agregados (${resultado.agregados.length}):\n${agregadosTexto}${agregadosDetalle}\n\n` +
-            `Omitidos (${resultado.omitidos.length}):\n${omitidosTexto}\n\n` +
-            'Nota: solo se agregaron materiales con coincidencia suficientemente clara en la base de datos.'
+            `Agregados (${resultado.agregados.length}):\n${agregadosTexto}${agregadosDetalle}`
         );
     }
 
@@ -4479,8 +4604,6 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/\bluego\b/gi, '\n')
             .replace(/\bsiguiente\b/gi, '\n')
             .replace(/\bcantidad\b/gi, ' ')
-            .replace(/\bunidades\b/gi, ' ')
-            .replace(/\bunidad\b/gi, ' ')
             .replace(/\s+y\s+(?=\d)/gi, '\n')
             .replace(/\s*,\s*/g, '\n')
             .replace(/\s*;\s*/g, '\n')
@@ -4710,6 +4833,7 @@ document.addEventListener('DOMContentLoaded', function() {
             filaExistente.cells[1].onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
             filaExistente.cells[2].onclick = function() { editarCelda(this, 'precio', nombreProducto); };
             productos[nombreProducto] = { precio: precio, cantidad: nuevaCantidad };
+            registrarProductoCotizado(nombreProducto);
             calcularTotal();
             autoguardarProforma();
             return true;
@@ -4783,6 +4907,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         cell5.appendChild(deleteButton);
 
+        registrarProductoCotizado(nombreProducto);
         calcularTotal();
         autoguardarProforma();
         return true;
