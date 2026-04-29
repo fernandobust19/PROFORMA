@@ -608,52 +608,211 @@
                 0 6px 16px rgba(20,95,140,0.18);
         }
 
-        .top-quoted-products {
-            margin-top: 6px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px 6px;
-            align-items: center;
-            min-height: 16px;
+        .top-quoted-drawer {
+            --top-quoted-panel-width: min(360px, calc(100vw - 62px));
+            position: fixed;
+            top: 50%;
+            right: 0;
+            width: 0;
+            height: 0;
+            z-index: 13200;
         }
 
-        .top-quoted-products-label {
-            font-size: 8px;
-            font-weight: 700;
-            color: #6a7a88;
-            letter-spacing: 0.2px;
+        .top-quoted-toggle {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50px;
+            height: 76px;
+            border: 0;
+            border-radius: 16px 0 0 16px;
+            background: linear-gradient(180deg, #14b8ff, #06d6a0);
+            color: #fff;
+            box-shadow: 0 10px 24px rgba(20, 95, 140, 0.28), inset 0 1px 0 rgba(255,255,255,0.45);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+            transform: translate(0, -50%);
+            transition: transform 0.34s cubic-bezier(.2,.9,.2,1), box-shadow 0.18s ease, filter 0.18s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .top-quoted-toggle:hover {
+            filter: brightness(1.04);
+            box-shadow: 0 14px 28px rgba(20, 95, 140, 0.34), 0 0 20px rgba(6,214,160,0.22), inset 0 1px 0 rgba(255,255,255,0.55);
+        }
+
+        .top-quoted-toggle i {
+            transition: transform 0.24s ease;
+        }
+
+        .top-quoted-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: var(--top-quoted-panel-width);
+            max-height: min(72vh, 560px);
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(244,251,255,0.98) 58%, rgba(238,250,245,0.98));
+            border: 1px solid rgba(20,184,255,0.22);
+            border-right: 0;
+            border-radius: 18px 0 0 18px;
+            box-shadow: -14px 18px 42px rgba(16, 32, 53, 0.18), 0 0 26px rgba(20,184,255,0.12);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(104%, -50%);
+            transition: transform 0.34s cubic-bezier(.2,.9,.2,1), opacity 0.2s ease;
+        }
+
+        .top-quoted-drawer.is-open .top-quoted-panel {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(0, -50%);
+        }
+
+        .top-quoted-drawer.is-open .top-quoted-toggle {
+            transform: translate(calc(-1 * var(--top-quoted-panel-width)), -50%);
+        }
+
+        .top-quoted-drawer.is-open .top-quoted-toggle i {
+            transform: rotate(180deg);
+        }
+
+        .top-quoted-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 14px 14px 10px;
+            border-bottom: 1px solid rgba(20,184,255,0.16);
+        }
+
+        .top-quoted-panel-kicker {
+            display: block;
+            font-size: 10px;
+            font-weight: 800;
+            color: #06a982;
+            letter-spacing: 0.7px;
             text-transform: uppercase;
         }
 
-        .top-quoted-product-chip {
+        .top-quoted-panel-title {
+            display: block;
+            margin-top: 2px;
+            font-size: 18px;
+            font-weight: 900;
+            color: #102035;
+            line-height: 1.1;
+        }
+
+        .top-quoted-close-btn {
+            width: 34px;
+            height: 34px;
+            border: 0;
+            border-radius: 8px;
+            background: rgba(255,56,100,0.1);
+            color: #ff3864;
+            cursor: pointer;
             display: inline-flex;
             align-items: center;
-            max-width: 118px;
-            padding: 1px 5px;
-            border-radius: 999px;
-            background: rgba(160,216,239,0.18);
-            border: 1px solid rgba(160,216,239,0.3);
-            font-size: 8px;
-            line-height: 1.15;
-            color: #42586d;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            justify-content: center;
+            font-size: 16px;
+            transition: transform 0.12s ease, background 0.12s ease;
+        }
+
+        .top-quoted-close-btn:hover {
+            background: rgba(255,56,100,0.18);
+            transform: translateY(-1px);
+        }
+
+        .top-quoted-products {
+            margin: 0;
+            padding: 12px 14px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 0;
+            overflow: auto;
+        }
+
+        .top-quoted-products-empty {
+            padding: 14px 12px;
+            border: 1px dashed rgba(20,184,255,0.28);
+            border-radius: 8px;
+            color: #5b6b7c;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            background: rgba(255,255,255,0.72);
+        }
+
+        .top-quoted-product-chip {
+            width: 100%;
+            min-height: 48px;
+            padding: 9px 10px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.88);
+            border: 1px solid rgba(20,184,255,0.22);
+            color: #21364a;
+            display: grid;
+            grid-template-columns: 28px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+            box-shadow: 0 5px 14px rgba(16, 32, 53, 0.07);
         }
 
         button.top-quoted-product-chip {
             cursor: pointer;
-            transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+            transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
         }
 
         button.top-quoted-product-chip:hover {
-            background: rgba(160,216,239,0.3);
-            box-shadow: 0 3px 8px rgba(20,95,140,0.12);
-            transform: translateY(-1px);
+            background: #f8fdff;
+            border-color: rgba(6,214,160,0.45);
+            box-shadow: 0 9px 18px rgba(20,95,140,0.14);
+            transform: translateX(-3px);
         }
 
-        .top-quoted-products:empty {
-            display: none;
+        button.top-quoted-product-chip:active {
+            transform: translateX(-1px) scale(0.99);
+        }
+
+        .top-quoted-product-rank {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(20,184,255,0.16), rgba(6,214,160,0.18));
+            color: #087a66;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .top-quoted-product-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .top-quoted-product-count {
+            padding: 3px 7px;
+            border-radius: 999px;
+            background: rgba(16,32,53,0.06);
+            color: #5b6b7c;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
         }
 
         .glass-action-btn:hover {
@@ -699,9 +858,29 @@
                 font-size: 8px;
             }
 
-            .top-quoted-products-label,
+            .top-quoted-drawer {
+                --top-quoted-panel-width: min(310px, calc(100vw - 54px));
+            }
+
+            .top-quoted-toggle {
+                width: 44px;
+                height: 66px;
+                font-size: 20px;
+            }
+
+            .top-quoted-panel-title {
+                font-size: 16px;
+            }
+
             .top-quoted-product-chip {
-                font-size: 7px;
+                min-height: 46px;
+                padding: 8px 9px;
+                grid-template-columns: 26px minmax(0, 1fr) auto;
+                gap: 8px;
+            }
+
+            .top-quoted-product-name {
+                font-size: 13px;
             }
         }
 
@@ -1025,7 +1204,23 @@
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
                             </div>
-                            <div id="top-quoted-products" class="top-quoted-products"></div>
+                            <div id="top-quoted-drawer" class="top-quoted-drawer">
+                                <button id="top-quoted-toggle" class="top-quoted-toggle" type="button" aria-label="Abrir productos más vendidos" aria-controls="top-quoted-panel" aria-expanded="false" onclick="toggleTopQuotedDrawer()">
+                                    <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                                </button>
+                                <aside id="top-quoted-panel" class="top-quoted-panel" aria-label="10 productos más vendidos" aria-hidden="true">
+                                    <div class="top-quoted-panel-header">
+                                        <div>
+                                            <span class="top-quoted-panel-kicker">Top 10</span>
+                                            <span class="top-quoted-panel-title">Más vendidos</span>
+                                        </div>
+                                        <button type="button" class="top-quoted-close-btn" onclick="toggleTopQuotedDrawer(false)" aria-label="Cerrar productos más vendidos">
+                                            <i class="fas fa-times" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                    <div id="top-quoted-products" class="top-quoted-products"></div>
+                                </aside>
+                            </div>
                             <button id="voice-materials-btn" class="voice-floating-btn" onclick="iniciarDictadoMateriales()" title="Dictar materiales. Puedes arrastrar este botón.">🎤<span>Voz</span></button>
                             <div class="proforma-container panel-translucido" id="proforma">
                                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px;">
@@ -2470,6 +2665,19 @@ document.addEventListener('DOMContentLoaded', function() {
     inicializarBotonVozFlotante();
     actualizarBotonVozMateriales();
     renderizarTopProductosCotizados();
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            toggleTopQuotedDrawer(false);
+        }
+    });
+
+    document.addEventListener('click', function(event) {
+        const drawer = document.getElementById('top-quoted-drawer');
+        if (!drawer || !drawer.classList.contains('is-open')) return;
+        if (drawer.contains(event.target)) return;
+        toggleTopQuotedDrawer(false);
+    });
 });
   // otras funciones...
 
@@ -3025,21 +3233,74 @@ document.addEventListener('DOMContentLoaded', function() {
             .slice(0, limit);
     }
 
+    function escaparHtmlTopCotizado(valor) {
+        return String(valor || '').replace(/[&<>"']/g, function(caracter) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[caracter];
+        });
+    }
+
+    function actualizarEstadoTopQuotedDrawer(abierto) {
+        const drawer = document.getElementById('top-quoted-drawer');
+        const toggle = document.getElementById('top-quoted-toggle');
+        const panel = document.getElementById('top-quoted-panel');
+        if (!drawer) return;
+
+        drawer.classList.toggle('is-open', abierto);
+        if (panel) {
+            panel.setAttribute('aria-hidden', abierto ? 'false' : 'true');
+        }
+
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+            toggle.setAttribute('aria-label', abierto ? 'Cerrar productos más vendidos' : 'Abrir productos más vendidos');
+            toggle.title = abierto ? 'Cerrar productos más vendidos' : 'Abrir productos más vendidos';
+        }
+    }
+
+    function toggleTopQuotedDrawer(forzarAbierto) {
+        const drawer = document.getElementById('top-quoted-drawer');
+        if (!drawer) return;
+
+        const abrir = typeof forzarAbierto === 'boolean'
+            ? forzarAbierto
+            : !drawer.classList.contains('is-open');
+
+        if (abrir) {
+            renderizarTopProductosCotizados();
+        }
+
+        actualizarEstadoTopQuotedDrawer(abrir);
+    }
+
     function renderizarTopProductosCotizados() {
         const contenedor = document.getElementById('top-quoted-products');
         if (!contenedor) return;
 
         const topProductos = obtenerTopProductosCotizados(10);
         if (!topProductos.length) {
-            contenedor.innerHTML = '';
+            contenedor.innerHTML = '<div class="top-quoted-products-empty">Aún no hay productos vendidos.</div>';
             return;
         }
 
-        contenedor.innerHTML =
-            '<span class="top-quoted-products-label">Más cotizados:</span>' +
-            topProductos
-                .map(item => `<button type="button" class="top-quoted-product-chip" title="${item.nombre} (${item.conteo})" onclick="abrirModalProductoCotizado('${item.nombre.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">${item.nombre}</button>`)
-                .join('');
+        contenedor.innerHTML = topProductos
+            .map((item, index) => {
+                const nombreSeguro = escaparHtmlTopCotizado(item.nombre);
+                const veces = item.conteo === 1 ? '1 vez' : `${item.conteo} veces`;
+                return `
+                    <button type="button" class="top-quoted-product-chip" data-top-quoted-name="${nombreSeguro}" title="${nombreSeguro} (${item.conteo})" onclick="abrirModalProductoCotizado(this.dataset.topQuotedName)">
+                        <span class="top-quoted-product-rank">${index + 1}</span>
+                        <span class="top-quoted-product-name">${nombreSeguro}</span>
+                        <span class="top-quoted-product-count">${veces}</span>
+                    </button>
+                `;
+            })
+            .join('');
     }
 
     function registrarProductoCotizado(nombreProducto) {
@@ -3070,6 +3331,8 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('No se encontró el producto en la base actual.');
             return;
         }
+
+        toggleTopQuotedDrawer(false);
 
         const overlay = document.createElement('div');
         overlay.id = 'top-quoted-product-modal';
