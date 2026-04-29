@@ -609,9 +609,9 @@
         }
 
         .top-quoted-drawer {
-            --top-quoted-panel-width: min(360px, calc(100vw - 62px));
+            --top-quoted-panel-width: min(280px, calc(100vw - 44px));
             position: fixed;
-            top: 50%;
+            top: 158px;
             right: 0;
             width: 0;
             height: 0;
@@ -622,26 +622,26 @@
             position: absolute;
             top: 0;
             right: 0;
-            width: 50px;
-            height: 76px;
+            width: 34px;
+            height: 48px;
             border: 0;
-            border-radius: 16px 0 0 16px;
+            border-radius: 12px 0 0 12px;
             background: linear-gradient(180deg, #14b8ff, #06d6a0);
             color: #fff;
-            box-shadow: 0 10px 24px rgba(20, 95, 140, 0.28), inset 0 1px 0 rgba(255,255,255,0.45);
+            box-shadow: 0 6px 16px rgba(20, 95, 140, 0.22), inset 0 1px 0 rgba(255,255,255,0.45);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 23px;
-            transform: translate(0, -50%);
+            font-size: 16px;
+            transform: translateX(0);
             transition: transform 0.34s cubic-bezier(.2,.9,.2,1), box-shadow 0.18s ease, filter 0.18s ease;
             -webkit-tap-highlight-color: transparent;
         }
 
         .top-quoted-toggle:hover {
             filter: brightness(1.04);
-            box-shadow: 0 14px 28px rgba(20, 95, 140, 0.34), 0 0 20px rgba(6,214,160,0.22), inset 0 1px 0 rgba(255,255,255,0.55);
+            box-shadow: 0 8px 18px rgba(20, 95, 140, 0.28), 0 0 14px rgba(6,214,160,0.18), inset 0 1px 0 rgba(255,255,255,0.55);
         }
 
         .top-quoted-toggle i {
@@ -653,29 +653,29 @@
             top: 0;
             right: 0;
             width: var(--top-quoted-panel-width);
-            max-height: min(72vh, 560px);
+            max-height: 430px;
             background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(244,251,255,0.98) 58%, rgba(238,250,245,0.98));
             border: 1px solid rgba(20,184,255,0.22);
             border-right: 0;
-            border-radius: 18px 0 0 18px;
-            box-shadow: -14px 18px 42px rgba(16, 32, 53, 0.18), 0 0 26px rgba(20,184,255,0.12);
+            border-radius: 14px 0 0 14px;
+            box-shadow: -10px 14px 28px rgba(16, 32, 53, 0.15), 0 0 18px rgba(20,184,255,0.1);
             overflow: hidden;
             display: flex;
             flex-direction: column;
             opacity: 0;
             pointer-events: none;
-            transform: translate(104%, -50%);
+            transform: translateX(104%);
             transition: transform 0.34s cubic-bezier(.2,.9,.2,1), opacity 0.2s ease;
         }
 
         .top-quoted-drawer.is-open .top-quoted-panel {
             opacity: 1;
             pointer-events: auto;
-            transform: translate(0, -50%);
+            transform: translateX(0);
         }
 
         .top-quoted-drawer.is-open .top-quoted-toggle {
-            transform: translate(calc(-1 * var(--top-quoted-panel-width)), -50%);
+            transform: translateX(calc(-1 * var(--top-quoted-panel-width)));
         }
 
         .top-quoted-drawer.is-open .top-quoted-toggle i {
@@ -686,41 +686,41 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
-            padding: 14px 14px 10px;
+            gap: 8px;
+            padding: 10px 11px 8px;
             border-bottom: 1px solid rgba(20,184,255,0.16);
         }
 
         .top-quoted-panel-kicker {
             display: block;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 800;
             color: #06a982;
-            letter-spacing: 0.7px;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
         }
 
         .top-quoted-panel-title {
             display: block;
             margin-top: 2px;
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 900;
             color: #102035;
             line-height: 1.1;
         }
 
         .top-quoted-close-btn {
-            width: 34px;
-            height: 34px;
+            width: 28px;
+            height: 28px;
             border: 0;
-            border-radius: 8px;
+            border-radius: 7px;
             background: rgba(255,56,100,0.1);
             color: #ff3864;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 13px;
             transition: transform 0.12s ease, background 0.12s ease;
         }
 
@@ -731,10 +731,10 @@
 
         .top-quoted-products {
             margin: 0;
-            padding: 12px 14px 14px;
+            padding: 9px 10px 11px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             min-height: 0;
             overflow: auto;
         }
@@ -752,18 +752,18 @@
 
         .top-quoted-product-chip {
             width: 100%;
-            min-height: 48px;
-            padding: 9px 10px;
+            min-height: 38px;
+            padding: 7px 8px;
             border-radius: 8px;
             background: rgba(255,255,255,0.88);
             border: 1px solid rgba(20,184,255,0.22);
             color: #21364a;
             display: grid;
-            grid-template-columns: 28px minmax(0, 1fr) auto;
+            grid-template-columns: 23px minmax(0, 1fr) auto;
             align-items: center;
-            gap: 10px;
+            gap: 7px;
             text-align: left;
-            box-shadow: 0 5px 14px rgba(16, 32, 53, 0.07);
+            box-shadow: 0 4px 10px rgba(16, 32, 53, 0.06);
         }
 
         button.top-quoted-product-chip {
@@ -783,12 +783,12 @@
         }
 
         .top-quoted-product-rank {
-            width: 28px;
-            height: 28px;
+            width: 23px;
+            height: 23px;
             border-radius: 50%;
             background: linear-gradient(180deg, rgba(20,184,255,0.16), rgba(6,214,160,0.18));
             color: #087a66;
-            font-size: 13px;
+            font-size: 11px;
             font-weight: 900;
             display: inline-flex;
             align-items: center;
@@ -800,7 +800,7 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 800;
             line-height: 1.2;
         }
@@ -810,7 +810,7 @@
             border-radius: 999px;
             background: rgba(16,32,53,0.06);
             color: #5b6b7c;
-            font-size: 11px;
+            font-size: 9px;
             font-weight: 800;
             white-space: nowrap;
         }
@@ -859,28 +859,29 @@
             }
 
             .top-quoted-drawer {
-                --top-quoted-panel-width: min(310px, calc(100vw - 54px));
+                --top-quoted-panel-width: min(250px, calc(100vw - 40px));
+                top: 394px;
             }
 
             .top-quoted-toggle {
-                width: 44px;
-                height: 66px;
-                font-size: 20px;
+                width: 30px;
+                height: 44px;
+                font-size: 14px;
             }
 
             .top-quoted-panel-title {
-                font-size: 16px;
+                font-size: 14px;
             }
 
             .top-quoted-product-chip {
-                min-height: 46px;
-                padding: 8px 9px;
-                grid-template-columns: 26px minmax(0, 1fr) auto;
-                gap: 8px;
+                min-height: 36px;
+                padding: 7px;
+                grid-template-columns: 22px minmax(0, 1fr) auto;
+                gap: 6px;
             }
 
             .top-quoted-product-name {
-                font-size: 13px;
+                font-size: 11px;
             }
         }
 
