@@ -3170,6 +3170,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const GOOGLE_AI_STORAGE_KEY = 'google_ai_material_config_v1';
     const VOICE_BUTTON_POSITION_KEY = 'voice_materials_button_position_v1';
     const TOP_QUOTED_PRODUCTS_STORAGE_KEY = 'top_quoted_products_v1';
+    let indiceRapidoTopCotizados = { key: '', map: new Map() };
     let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
     let googleAIConfig = cargarGoogleAIConfig();
     let reconocimientoVozMateriales = null;
@@ -3216,6 +3217,68 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('No se pudo guardar el ranking de productos cotizados:', error);
         }
+    }
+
+    function obtenerOpcionesProductosActuales() {
+        if (todosLosProductosOptions.length) return todosLosProductosOptions;
+        const selectProducto = document.getElementById('producto');
+        return selectProducto ? Array.from(selectProducto.options || []) : [];
+    }
+
+    function parsearTextoProductoConPrecio(textoOpcion) {
+        const texto = String(textoOpcion || '');
+        const separador = ' - $';
+        const indiceSeparador = texto.lastIndexOf(separador);
+        const nombre = (indiceSeparador >= 0 ? texto.slice(0, indiceSeparador) : texto).trim();
+        const precioTexto = indiceSeparador >= 0
+            ? texto.slice(indiceSeparador + separador.length).trim().replace(',', '.')
+            : '';
+        const precio = parseFloat(precioTexto);
+        return {
+            nombre,
+            precio: isFinite(precio) ? precio : NaN
+        };
+    }
+
+    function obtenerIndiceRapidoProductosCotizados() {
+        const opciones = obtenerOpcionesProductosActuales();
+        const primerTexto = opciones[0] ? opciones[0].text : '';
+        const ultimoTexto = opciones.length ? opciones[opciones.length - 1].text : '';
+        const key = `${opciones.length}|${primerTexto}|${ultimoTexto}`;
+        if (indiceRapidoTopCotizados.key === key) return indiceRapidoTopCotizados.map;
+
+        const map = new Map();
+        opciones.forEach(option => {
+            const item = parsearTextoProductoConPrecio(option.text);
+            if (item.nombre && isFinite(item.precio) && item.precio > 0 && !map.has(item.nombre)) {
+                map.set(item.nombre, item);
+            }
+        });
+
+        indiceRapidoTopCotizados = { key, map };
+        return map;
+    }
+
+    function buscarProductoCotizadoRapido(nombreProducto) {
+        const nombre = String(nombreProducto || '').trim();
+        if (!nombre) return null;
+
+        const itemCatalogo = obtenerIndiceRapidoProductosCotizados().get(nombre);
+        if (itemCatalogo) return itemCatalogo;
+
+        const ranking = cargarRankingProductosCotizados();
+        const itemRanking = ranking[nombre] || {};
+        const precioRanking = parseFloat(itemRanking.price);
+        if (isFinite(precioRanking) && precioRanking > 0) {
+            return { nombre, precio: precioRanking };
+        }
+
+        const itemAgregado = productos && productos[nombre];
+        if (itemAgregado && isFinite(itemAgregado.precio) && itemAgregado.precio > 0) {
+            return { nombre, precio: itemAgregado.precio };
+        }
+
+        return null;
     }
 
     function obtenerTopProductosCotizados(limit = 10) {
@@ -3304,14 +3367,18 @@ document.addEventListener('DOMContentLoaded', function() {
             .join('');
     }
 
-    function registrarProductoCotizado(nombreProducto) {
+    function registrarProductoCotizado(nombreProducto, precioProducto) {
         const nombre = String(nombreProducto || '').trim();
         if (!nombre) return;
 
         const ranking = cargarRankingProductosCotizados();
         const actual = ranking[nombre] || { count: 0, lastUsed: '' };
+        const precio = parseFloat(precioProducto);
         actual.count = (isFinite(actual.count) ? actual.count : 0) + 1;
         actual.lastUsed = new Date().toISOString();
+        if (isFinite(precio) && precio > 0) {
+            actual.price = precio;
+        }
         ranking[nombre] = actual;
 
         guardarRankingProductosCotizados(ranking);
@@ -3326,8 +3393,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function abrirModalProductoCotizado(nombreProducto) {
         cerrarModalProductoCotizado();
 
-        const catalogo = construirCatalogoMateriales();
-        const item = catalogo.find(entry => entry.nombre === nombreProducto);
+        const item = buscarProductoCotizadoRapido(nombreProducto);
         if (!item || !isFinite(item.precio) || item.precio <= 0) {
             alert('No se encontró el producto en la base actual.');
             return;
@@ -3899,21 +3965,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function construirCatalogoMateriales() {
-        const options = todosLosProductosOptions.length
-            ? todosLosProductosOptions
-            : Array.from(document.getElementById('producto').options || []);
+        const options = obtenerOpcionesProductosActuales();
 
         return options.map(option => {
-            const partes = option.text.split(' - $');
-            const nombre = (partes[0] || '').trim();
-            const precio = partes[1] ? parseFloat(partes[1]) : NaN;
+            const item = parsearTextoProductoConPrecio(option.text);
+            const aliasesAprendidos = obtenerAliasesAprendidosParaNombre(item.nombre);
             return {
-                nombre: nombre,
-                precio: isNaN(precio) ? 0 : precio,
-                normalizado: normalizarTextoMaterial(nombre),
-                tokens: obtenerTokensMaterial(nombre),
-                aliasesAprendidos: obtenerAliasesAprendidosParaNombre(nombre),
-                variantes: generarVariantesMaterial(nombre, obtenerAliasesAprendidosParaNombre(nombre))
+                nombre: item.nombre,
+                precio: isNaN(item.precio) ? 0 : item.precio,
+                normalizado: normalizarTextoMaterial(item.nombre),
+                tokens: obtenerTokensMaterial(item.nombre),
+                aliasesAprendidos,
+                variantes: generarVariantesMaterial(item.nombre, aliasesAprendidos)
             };
         }).filter(item => item.nombre);
     }
@@ -5176,7 +5239,7 @@ document.addEventListener('DOMContentLoaded', function() {
             filaExistente.cells[1].onclick = function() { editarCelda(this, 'cantidad', nombreProducto); };
             filaExistente.cells[2].onclick = function() { editarCelda(this, 'precio', nombreProducto); };
             productos[nombreProducto] = { precio: precio, cantidad: nuevaCantidad };
-            registrarProductoCotizado(nombreProducto);
+            registrarProductoCotizado(nombreProducto, precio);
             calcularTotal();
             autoguardarProforma();
             return true;
@@ -5250,7 +5313,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         cell5.appendChild(deleteButton);
 
-        registrarProductoCotizado(nombreProducto);
+        registrarProductoCotizado(nombreProducto, precio);
         calcularTotal();
         autoguardarProforma();
         return true;
