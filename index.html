@@ -5680,6 +5680,13 @@ function abrirCalculadoraMateriales() {
         return palabras.reduce((acc, palabra) => acc + palabra.cx, 0) / palabras.length;
     }
 
+    function obtenerInicioCabeceraProformaImagen(linea, patron) {
+        const palabras = (linea && linea.words ? linea.words : [])
+            .filter(palabra => patron.test(normalizarTextoMaterial(palabra.text)));
+        if (!palabras.length) return NaN;
+        return Math.min(...palabras.map(palabra => palabra.x0));
+    }
+
     function detectarLayoutTablaProformaImagen(palabras) {
         if (!palabras || !palabras.length) return null;
 
@@ -5712,6 +5719,41 @@ function abrirCalculadoraMateriales() {
             subtotal: obtenerCentroCabeceraProformaImagen(cabecera, /\bSUBTOTAL\b/),
             accion: obtenerCentroCabeceraProformaImagen(cabecera, /\bACCION\b/)
         } : {};
+        const inicios = cabecera ? {
+            producto: obtenerInicioCabeceraProformaImagen(cabecera, /\bPRODUCTO\b/),
+            cant: obtenerInicioCabeceraProformaImagen(cabecera, /\bCANT\b/),
+            precio: obtenerInicioCabeceraProformaImagen(cabecera, /\bPRECIO\b/),
+            subtotal: obtenerInicioCabeceraProformaImagen(cabecera, /\bSUBTOTAL\b/),
+            accion: obtenerInicioCabeceraProformaImagen(cabecera, /\bACCION\b/)
+        } : {};
+        const paddingCabecera = Math.max(4, Math.min(16, altoMedio * 0.65));
+        let limitesPorCabecera = null;
+
+        if (
+            isFinite(inicios.producto) &&
+            isFinite(inicios.cant) &&
+            isFinite(inicios.precio) &&
+            isFinite(inicios.subtotal) &&
+            inicios.producto < inicios.cant &&
+            inicios.cant < inicios.precio &&
+            inicios.precio < inicios.subtotal
+        ) {
+            const maxX = Math.max(...palabras.map(p => p.x1));
+            const l0 = inicios.producto - paddingCabecera;
+            const l1 = inicios.cant - paddingCabecera;
+            const l2 = inicios.precio - paddingCabecera;
+            const l3 = inicios.subtotal - paddingCabecera;
+            let l4 = isFinite(inicios.accion) && inicios.accion > inicios.subtotal
+                ? inicios.accion - paddingCabecera
+                : NaN;
+
+            if (!isFinite(l4)) {
+                l4 = Math.max(l3 + Math.max(70, (l3 - l2) * 1.05), maxX + paddingCabecera);
+            }
+
+            const l5 = Math.max(l4 + Math.max(45, (l4 - l3) * 0.55), maxX + paddingCabecera);
+            limitesPorCabecera = [l0, l1, l2, l3, l4, l5];
+        }
 
         const estimaciones = [];
         const claves = Object.keys(ratios).filter(clave => isFinite(centros[clave]));
@@ -5730,18 +5772,24 @@ function abrirCalculadoraMateriales() {
             }
         }
 
-        let izquierda = medianaNumerosProformaImagen(estimaciones.map(item => item.izquierda));
-        let ancho = medianaNumerosProformaImagen(estimaciones.map(item => item.ancho));
+        let limites = limitesPorCabecera;
+        let izquierda = limites ? limites[0] : medianaNumerosProformaImagen(estimaciones.map(item => item.izquierda));
+        let ancho = limites ? (limites[5] - limites[0]) : medianaNumerosProformaImagen(estimaciones.map(item => item.ancho));
 
-        if (!isFinite(izquierda) || !isFinite(ancho) || ancho <= 0) {
+        if (!limites && (!isFinite(izquierda) || !isFinite(ancho) || ancho <= 0)) {
             const minX = Math.min(...palabras.map(p => p.x0));
             const maxX = Math.max(...palabras.map(p => p.x1));
             izquierda = minX;
             ancho = maxX - minX;
         }
 
-        const derecha = izquierda + ancho;
-        const limites = [0, 0.45, 0.58, 0.73, 0.90, 1].map(ratio => izquierda + (ancho * ratio));
+        if (!limites) {
+            limites = [0, 0.45, 0.58, 0.73, 0.90, 1].map(ratio => izquierda + (ancho * ratio));
+        }
+
+        const derecha = limites[5];
+        izquierda = limites[0];
+        ancho = derecha - izquierda;
         const tableTop = cabecera
             ? cabecera.y1 + Math.max(2, altoMedio * 0.25)
             : Math.min(...palabras.map(p => p.y0));
@@ -5815,6 +5863,8 @@ function abrirCalculadoraMateriales() {
     function extraerDineroCasilleroProformaImagen(texto) {
         const limpio = String(texto || '')
             .replace(/\bS\s+(?=\d)/gi, '$')
+            .replace(/([$S]\s*)[Il](?=\d)/gi, function(_, prefijo) { return prefijo + '1'; })
+            .replace(/\b[Il](?=\d{1,6}[.,]\d{2}\b)/g, '1')
             .replace(/([0-9])[Oo](?=\d{0,2}\b)/g, function(_, numero) { return numero + '0'; })
             .replace(/\s+/g, ' ')
             .trim();
@@ -6033,6 +6083,7 @@ function abrirCalculadoraMateriales() {
             cliente: cliente || 'CONSUMIDOR FINAL',
             ruc,
             vendedor: extraerValorCampoProformaImagen(lineas, 'Vendedor'),
+            fecha: extraerValorCampoProformaImagen(lineas, 'Fecha'),
             productos: usarProductosPorCajas ? productosPorCajas : productosPorTexto,
             textoOCR: textoPlanoOCR
         };
@@ -6060,9 +6111,13 @@ function abrirCalculadoraMateriales() {
         const clienteInput = document.getElementById('nombreCliente');
         const rucInput = document.getElementById('rucCliente');
         const vendedorDisplay = document.getElementById('nombreVendedorDisplay');
+        const fechaDisplay = document.getElementById('fechaProforma');
         if (clienteInput) clienteInput.value = datos.cliente || '';
         if (rucInput) rucInput.value = datos.ruc || '';
         if (vendedorDisplay) vendedorDisplay.textContent = datos.vendedor || '';
+        if (fechaDisplay && datos.fecha) {
+            fechaDisplay.textContent = /^Fecha\s*:/i.test(datos.fecha) ? datos.fecha : 'Fecha: ' + datos.fecha;
+        }
 
         productosDetectados.forEach(item => {
             agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, 'proforma_jpg');
