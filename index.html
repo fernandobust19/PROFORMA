@@ -1200,10 +1200,12 @@
                                 <button id="guardarImagenBtn" class="action-button btn-azul" style="margin-left: auto;" onclick="guardarComoImagen()">⬇️🖼️Guardar Imagen</button>
                             </div>
                             <div class="proforma-main-actions-container">
+                                <input type="file" id="proforma-image-input" accept="image/*" onchange="procesarImagenProformaGuardada(event)" style="display:none;">
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarListaMateriales()" title="Ver materiales" aria-label="Ver materiales">📋<span>Materiales</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirModalTextoMateriales()" title="Pegar lista de materiales" aria-label="Pegar lista de materiales">📝<span>Lista</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()" title="Leer lista desde imagen" aria-label="Leer lista desde imagen">📷<span>Imagen</span></button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorProformaImagen()" title="Cargar proforma desde JPG" aria-label="Cargar proforma desde JPG">🧾<span>JPG</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
                             </div>
@@ -3998,6 +4000,13 @@ document.addEventListener('DOMContentLoaded', function() {
         input.click();
     }
 
+    function abrirSelectorProformaImagen() {
+        const input = document.getElementById('proforma-image-input');
+        if (!input) return;
+        input.value = '';
+        input.click();
+    }
+
     function cerrarModalTextoMateriales() {
         const modal = document.getElementById('text-materials-modal');
         if (modal) modal.remove();
@@ -5110,6 +5119,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (modal) modal.remove();
     }
 
+    function cerrarModalRevisionProformaImagen() {
+        const modal = document.getElementById('proforma-image-review-modal');
+        if (modal) modal.remove();
+    }
+
     function crearFilaRevisionOCR(detalle, index) {
         const score = Math.round((detalle.score || 0) * 100);
         const badgeColor = detalle.estado === 'omitido'
@@ -5230,6 +5244,277 @@ document.addEventListener('DOMContentLoaded', function() {
                         return !checked || !checked.checked;
                     })
                     .map(detalle => `"${detalle.original}"`)
+            });
+        };
+    }
+
+    function limpiarLineaProformaImagenOCR(linea) {
+        return String(linea || '')
+            .replace(/[|•·*]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function extraerValorCampoProformaImagen(lineas, etiqueta) {
+        const regex = new RegExp('^\\s*' + etiqueta + '\\s*[:.-]?\\s*(.*)$', 'i');
+        for (let i = 0; i < lineas.length; i++) {
+            const match = lineas[i].match(regex);
+            if (!match) continue;
+
+            const valor = limpiarLineaProformaImagenOCR(match[1] || '');
+            if (valor && normalizarTextoMaterial(valor) !== normalizarTextoMaterial(etiqueta)) {
+                return valor;
+            }
+
+            const siguiente = limpiarLineaProformaImagenOCR(lineas[i + 1] || '');
+            if (siguiente && !/^[:.-]?$/.test(siguiente)) return siguiente;
+        }
+        return '';
+    }
+
+    function parsearDineroProformaImagen(valor) {
+        let texto = String(valor || '')
+            .replace(/[Ss]/g, '$')
+            .replace(/\$/g, '')
+            .replace(/\s+/g, '')
+            .replace(/[^\d,.-]/g, '');
+
+        if (!texto) return NaN;
+        if (texto.includes(',') && texto.includes('.')) {
+            texto = texto.replace(/,/g, '');
+        } else if (texto.includes(',') && !texto.includes('.')) {
+            texto = texto.replace(',', '.');
+        }
+
+        const numero = parseFloat(texto);
+        return isFinite(numero) ? numero : NaN;
+    }
+
+    function extraerPreciosConIndiceProformaImagen(linea) {
+        const texto = String(linea || '');
+        const regex = /[$S]\s*\d{1,7}(?:[.,]\d{2})|\b\d{1,7}[.,]\d{2}\b/gi;
+        const matches = [...texto.matchAll(regex)].map(match => ({
+            raw: match[0],
+            index: match.index || 0,
+            value: parsearDineroProformaImagen(match[0])
+        })).filter(item => isFinite(item.value) && item.value > 0);
+
+        if (!/[$S]/i.test(texto) && matches.length < 2) return [];
+        return matches;
+    }
+
+    function esLineaMetaProformaImagen(linea) {
+        const normalizada = normalizarTextoMaterial(linea);
+        return !normalizada ||
+            /^UP\s*CONS\b/.test(normalizada) ||
+            /^(DIRECCION|DIRECCION|SUCURSAL|TELF|TELEFONO|NOTA|CLIENTE|RUC|VENDEDOR|FECHA)\b/.test(normalizada) ||
+            /\b(PRODUCTO|PRECIO|SUBTOTAL|ACCION|ACCION|CANT)\b/.test(normalizada) ||
+            /^WWW\b/.test(normalizada);
+    }
+
+    function parsearFilaProductoProformaImagen(linea, bufferNombre) {
+        const precios = extraerPreciosConIndiceProformaImagen(linea);
+        if (!precios.length) return null;
+
+        const precioUnitarioInfo = precios.length >= 2 ? precios[precios.length - 2] : precios[0];
+        const subtotalInfo = precios.length >= 2 ? precios[precios.length - 1] : null;
+        const prefijo = linea.slice(0, precioUnitarioInfo.index).trim();
+        const cantidadMatch = prefijo.match(/(\d+(?:[.,]\d+)?)\s*$/);
+        const cantidad = cantidadMatch
+            ? normalizarCantidadDecimal(cantidadMatch[1])
+            : (subtotalInfo ? normalizarCantidadDecimal(subtotalInfo.value / precioUnitarioInfo.value) : 1);
+
+        const nombreLinea = cantidadMatch
+            ? prefijo.slice(0, cantidadMatch.index).trim()
+            : prefijo;
+        const nombre = [...bufferNombre, nombreLinea]
+            .map(limpiarLineaProformaImagenOCR)
+            .filter(Boolean)
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!nombre || !isFinite(cantidad) || cantidad <= 0 || !isFinite(precioUnitarioInfo.value) || precioUnitarioInfo.value <= 0) {
+            return null;
+        }
+
+        return {
+            nombre,
+            cantidad,
+            precio: precioUnitarioInfo.value,
+            subtotal: subtotalInfo ? subtotalInfo.value : precioUnitarioInfo.value * cantidad
+        };
+    }
+
+    function extraerProductosProformaImagen(lineas) {
+        const productosExtraidos = [];
+        const bufferNombre = [];
+        let dentroTabla = false;
+
+        lineas.forEach(lineaOriginal => {
+            const linea = limpiarLineaProformaImagenOCR(lineaOriginal);
+            if (!linea) return;
+
+            const normalizada = normalizarTextoMaterial(linea);
+            if (/\bPRODUCTO\b/.test(normalizada) && /\b(CANT|PRECIO|SUBTOTAL)\b/.test(normalizada)) {
+                dentroTabla = true;
+                bufferNombre.length = 0;
+                return;
+            }
+
+            if (/\bTOTAL\b/.test(normalizada) || /\bVENDEDOR\b/.test(normalizada) || /\bFECHA\b/.test(normalizada) || /^WWW\b/.test(normalizada)) {
+                if (dentroTabla) dentroTabla = false;
+                return;
+            }
+
+            const precios = extraerPreciosConIndiceProformaImagen(linea);
+            if (precios.length) {
+                const producto = parsearFilaProductoProformaImagen(linea, bufferNombre);
+                if (producto) productosExtraidos.push(producto);
+                bufferNombre.length = 0;
+                return;
+            }
+
+            if (dentroTabla && !esLineaMetaProformaImagen(linea)) {
+                bufferNombre.push(linea);
+            }
+        });
+
+        return productosExtraidos;
+    }
+
+    function extraerDatosProformaImagenDesdeOCR(textoOCR) {
+        const lineas = String(textoOCR || '')
+            .split(/\n+/)
+            .map(limpiarLineaProformaImagenOCR)
+            .filter(Boolean);
+
+        const cliente = extraerValorCampoProformaImagen(lineas, 'Cliente');
+        let ruc = extraerValorCampoProformaImagen(lineas, 'RUC');
+        if (/^RUC$/i.test(ruc)) ruc = '';
+
+        return {
+            cliente: cliente || 'CONSUMIDOR FINAL',
+            ruc,
+            vendedor: extraerValorCampoProformaImagen(lineas, 'Vendedor'),
+            productos: extraerProductosProformaImagen(lineas),
+            textoOCR: String(textoOCR || '')
+        };
+    }
+
+    function aplicarProformaImagenReconstruida(datos) {
+        const productosDetectados = Array.isArray(datos.productos) ? datos.productos : [];
+        if (!productosDetectados.length) {
+            alert('No hay productos válidos para cargar.');
+            return;
+        }
+
+        const tabla = document.querySelector('#proforma table') || document.querySelector('table');
+        const tieneProductosActuales = tabla && tabla.rows && tabla.rows.length > 1;
+        if (tieneProductosActuales && !confirm('Esto reemplazará los productos actuales con los detectados en la imagen. ¿Continuar?')) {
+            return;
+        }
+
+        crearNuevaProforma();
+        if (tabla) {
+            while (tabla.rows.length > 1) tabla.deleteRow(1);
+        }
+        productos = {};
+
+        const clienteInput = document.getElementById('nombreCliente');
+        const rucInput = document.getElementById('rucCliente');
+        const vendedorDisplay = document.getElementById('nombreVendedorDisplay');
+        if (clienteInput) clienteInput.value = datos.cliente || '';
+        if (rucInput) rucInput.value = datos.ruc || '';
+        if (vendedorDisplay) vendedorDisplay.textContent = datos.vendedor || '';
+
+        productosDetectados.forEach(item => {
+            agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, 'proforma_jpg');
+        });
+
+        calcularTotal();
+        autoguardarProforma();
+        alert(`Proforma cargada desde imagen.\n\nProductos cargados: ${productosDetectados.length}`);
+    }
+
+    function mostrarModalRevisionProformaImagen(resultado) {
+        cerrarModalRevisionProformaImagen();
+
+        if (!resultado.productos.length) {
+            alert('No se detectaron productos en la imagen.\n\nRevisa que sea una foto clara de una proforma generada por el sistema.');
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'proforma-image-review-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:13600;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const filas = resultado.productos.map((item, index) => `
+            <div style="display:grid;grid-template-columns:24px minmax(180px,1fr) 80px 92px;gap:8px;align-items:center;border-bottom:1px solid #edf2f7;padding:8px 0;">
+                <input type="checkbox" data-proforma-img-check="${index}" checked>
+                <input type="text" data-proforma-img-name="${index}" value="${escaparHtmlTopCotizado(item.nombre)}" style="padding:7px 8px;border-radius:8px;border:1px solid #b8d8ea;font-size:13px;">
+                <input type="number" data-proforma-img-qty="${index}" value="${item.cantidad}" min="0.01" step="0.01" style="padding:7px 8px;border-radius:8px;border:1px solid #b8d8ea;font-size:13px;">
+                <input type="number" data-proforma-img-price="${index}" value="${Number(item.precio).toFixed(2)}" min="0" step="0.01" style="padding:7px 8px;border-radius:8px;border:1px solid #b8d8ea;font-size:13px;">
+            </div>
+        `).join('');
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:14px;max-width:960px;width:100%;max-height:88vh;overflow:auto;padding:16px;box-shadow:0 12px 32px rgba(0,0,0,.25);animation:popIn 260ms cubic-bezier(.2,1.1,.3,1) forwards;';
+        box.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+                <div>
+                    <div style="font-size:18px;font-weight:800;color:#102035;">Revisar proforma JPG</div>
+                    <div style="font-size:12px;color:#5b6b7c;">Corrige cualquier texto leído antes de cargarlo al proformador.</div>
+                </div>
+                <button id="proforma-img-close" class="proforma-action-btn" style="background:#e74c3c;color:#fff;">Cerrar</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+                <label style="font-size:12px;color:#32495f;font-weight:700;">Cliente<input id="proforma-img-cliente" type="text" value="${escaparHtmlTopCotizado(resultado.cliente || '')}" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #b8d8ea;"></label>
+                <label style="font-size:12px;color:#32495f;font-weight:700;">RUC<input id="proforma-img-ruc" type="text" value="${escaparHtmlTopCotizado(resultado.ruc || '')}" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #b8d8ea;"></label>
+                <label style="font-size:12px;color:#32495f;font-weight:700;">Vendedor<input id="proforma-img-vendedor" type="text" value="${escaparHtmlTopCotizado(resultado.vendedor || '')}" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #b8d8ea;"></label>
+            </div>
+            <div style="display:grid;grid-template-columns:24px minmax(180px,1fr) 80px 92px;gap:8px;font-size:12px;font-weight:800;color:#375a70;border-bottom:2px solid #d8e9f6;padding-bottom:6px;">
+                <span></span><span>Producto</span><span>Cant.</span><span>Precio</span>
+            </div>
+            <div>${filas}</div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+                <button id="proforma-img-cancel" class="proforma-action-btn" style="background:#6c757d;color:#fff;">Cancelar</button>
+                <button id="proforma-img-apply" class="proforma-action-btn btn-verde">Cargar proforma</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cerrar = () => cerrarModalRevisionProformaImagen();
+        box.querySelector('#proforma-img-close').onclick = cerrar;
+        box.querySelector('#proforma-img-cancel').onclick = cerrar;
+        overlay.onclick = event => { if (event.target === overlay) cerrar(); };
+
+        box.querySelector('#proforma-img-apply').onclick = function() {
+            const productosSeleccionados = [];
+            resultado.productos.forEach((item, index) => {
+                const checked = box.querySelector(`[data-proforma-img-check="${index}"]`);
+                if (!checked || !checked.checked) return;
+
+                const nombre = (box.querySelector(`[data-proforma-img-name="${index}"]`)?.value || '').trim();
+                const cantidad = normalizarCantidadDecimal(box.querySelector(`[data-proforma-img-qty="${index}"]`)?.value || '');
+                const precio = parseFloat(box.querySelector(`[data-proforma-img-price="${index}"]`)?.value || '');
+                if (!nombre || !isFinite(cantidad) || cantidad <= 0 || !isFinite(precio) || precio <= 0) return;
+                productosSeleccionados.push({ nombre, cantidad, precio });
+            });
+
+            if (!productosSeleccionados.length) {
+                alert('Selecciona al menos un producto válido.');
+                return;
+            }
+
+            cerrar();
+            aplicarProformaImagenReconstruida({
+                cliente: (box.querySelector('#proforma-img-cliente')?.value || '').trim(),
+                ruc: (box.querySelector('#proforma-img-ruc')?.value || '').trim(),
+                vendedor: (box.querySelector('#proforma-img-vendedor')?.value || '').trim(),
+                productos: productosSeleccionados
             });
         };
     }
@@ -5430,6 +5715,44 @@ document.addEventListener('DOMContentLoaded', function() {
             cerrarOverlayOCR();
             console.error('Error al procesar imagen de materiales:', error);
             alert('No se pudo procesar la imagen.\n\n' + error.message);
+        } finally {
+            if (event && event.target) {
+                event.target.value = '';
+            }
+        }
+    }
+
+    async function procesarImagenProformaGuardada(event) {
+        const file = event && event.target && event.target.files ? event.target.files[0] : null;
+        if (!file) return;
+
+        if (typeof Tesseract === 'undefined') {
+            alert('La librería de lectura de imágenes no está disponible. Revisa tu conexión e intenta de nuevo.');
+            return;
+        }
+
+        try {
+            mostrarOverlayOCR('Leyendo proforma JPG', 'Extrayendo cliente, vendedor y productos...');
+            const resultadoOCR = await Tesseract.recognize(file, 'spa+eng', {
+                logger: mensaje => {
+                    if (!mensaje || !mensaje.status) return;
+                    const progreso = typeof mensaje.progress === 'number' ? ` (${Math.round(mensaje.progress * 100)}%)` : '';
+                    mostrarOverlayOCR('Leyendo proforma JPG', `${mensaje.status}${progreso}`);
+                }
+            });
+
+            const textoOCR = resultadoOCR && resultadoOCR.data ? resultadoOCR.data.text : '';
+            if (!textoOCR || !textoOCR.trim()) {
+                throw new Error('No se pudo leer texto útil en la imagen.');
+            }
+
+            const datosProforma = extraerDatosProformaImagenDesdeOCR(textoOCR);
+            cerrarOverlayOCR();
+            mostrarModalRevisionProformaImagen(datosProforma);
+        } catch (error) {
+            cerrarOverlayOCR();
+            console.error('Error al procesar proforma JPG:', error);
+            alert('No se pudo cargar la proforma desde la imagen.\n\n' + error.message);
         } finally {
             if (event && event.target) {
                 event.target.value = '';
