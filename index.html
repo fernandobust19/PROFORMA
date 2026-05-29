@@ -2647,6 +2647,32 @@ function forzarAutoguardadoProforma() {
     return ejecutarAutoguardadoProforma({ silencioso: true });
 }
 
+function obtenerProformaIdDeGuardado(item) {
+    if (!item) return '';
+    if (item.proformaId) return item.proformaId;
+
+    const idTexto = String(item.id || '');
+    const match = idTexto.match(/(proforma_\d+_[a-z0-9]+)/i);
+    return match ? match[1] : '';
+}
+
+function activarProformaCargada(item, tipo) {
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = null;
+    }
+
+    const idGuardado = tipo === 'auto' ? obtenerProformaIdDeGuardado(item) : '';
+    if (idGuardado) {
+        proformaId = idGuardado;
+        hasAutoSaved = true;
+    } else {
+        crearNuevaProforma();
+    }
+
+    actualizarEstadoBotonNuevaProforma();
+}
+
 // Mostrar indicador visual de autoguardado
 function mostrarIndicadorAutoguardado(mensaje, esError = false) {
     // Crear o actualizar indicador
@@ -6177,8 +6203,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         throw new Error('Contenido vacío o no disponible.');
                     }
                     overlay.remove();
+                    activarProformaCargada(item, tipo);
                     cargarProformaEnPagina(contenidoProforma);
-                    crearNuevaProforma();
                 } catch (err) {
                     alert('No se pudo abrir la proforma: ' + err.message);
                     openBtn.disabled = false;
