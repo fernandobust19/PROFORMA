@@ -104,7 +104,7 @@
                 .where('userId', '==', user.uid)
                 .where('tipo', '==', tipo)
                 .orderBy('updatedAt', 'desc')
-                .limit(200)
+                .limit(tipo === 'auto' ? 50 : 200)
                 .get();
             return snapshot.docs.map((doc) => {
                 const data = doc.data() || {};

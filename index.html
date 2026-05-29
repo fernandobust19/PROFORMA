@@ -1202,6 +1202,8 @@
                             <div class="proforma-main-actions-container">
                                 <input type="file" id="ocr-image-input" accept="image/*" onchange="procesarImagenListaMateriales(event)" style="display:none;">
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarListaMateriales()" title="Ver materiales" aria-label="Ver materiales">📋<span>Materiales</span></button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirModalTextoMateriales()" title="Pegar lista de materiales" aria-label="Pegar lista de materiales">📝<span>Lista</span></button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()" title="Leer lista desde imagen" aria-label="Leer lista desde imagen">📷<span>Imagen</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
                             </div>
@@ -2203,6 +2205,7 @@ function guardarPaginaPersonalizadaDesdeModal() {
     var input = document.getElementById('input-nombre-archivo');
     var nombrePagina = (input.value || '').trim() || 'proforma_guardada';
     var nombreCliente = (document.getElementById('nombreCliente').value || '').trim() || "CONSUMIDOR FINAL";
+    var rucCliente = (document.getElementById('rucCliente').value || '').trim();
     var nombreVendedor = document.getElementById('nombreVendedorDisplay').innerText || "";
 
     // Clona el documento y elimina el modal ANTES de guardar
@@ -2225,10 +2228,14 @@ function guardarPaginaPersonalizadaDesdeModal() {
     let htmlClonado = docClone.outerHTML;
     htmlClonado = htmlClonado.replace(
         /<input type="text" id="nombreCliente"[^>]*>/,
-        `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${nombreCliente}">`
+        `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${escaparHtml(nombreCliente)}">`
+    );
+    htmlClonado = htmlClonado.replace(
+        /<input type="text" id="rucCliente"[^>]*>/,
+        `<input type="text" id="rucCliente" placeholder="RUC" value="${escaparHtml(rucCliente)}">`
     );
     htmlClonado = htmlClonado.replace(/<span id="nombreVendedorDisplay"[^>]*>.*<\/span>/,
-        `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
+        `<span id="nombreVendedorDisplay" style="font-weight: bold;">${escaparHtml(nombreVendedor)}</span>`
     );
 
     // Guardar en localStorage la proforma (nombre, fecha, html)
@@ -2247,6 +2254,7 @@ function guardarPaginaPersonalizadaDesdeModal() {
         isAutoSave: false,
         total: obtenerTotalActual(),
         nombreCliente,
+        rucCliente,
         nombreVendedor
     };
     proformas.push(datosManual);
@@ -2284,22 +2292,24 @@ window.guardarPaginaPersonalizadaDesdeModal = guardarPaginaPersonalizadaDesdeMod
 let proformaId = null;
 let autoSaveTimeout = null;
 let hasAutoSaved = false; // Indica si la proforma actual ya fue autoguardada
-const MAX_AUTOGUARDADOS = 100;
+const MAX_AUTOGUARDADOS = 50;
+const AUTOGUARDADO_DELAY_MS = 1000;
+const STORAGE_KEY_AUTOGUARDADOS = 'proformas_autoguardadas';
 
 // Generar ID único para cada nueva proforma
 function generarProformaId() {
     return 'proforma_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
-function limitarAutoguardados(proformas, proformaActualId) {
-    const lista = Array.isArray(proformas) ? [...proformas] : [];
-    if (lista.length <= MAX_AUTOGUARDADOS) return lista;
+function obtenerTimestampGuardado(item) {
+    const timestamp = item && item.savedAt ? new Date(item.savedAt).getTime() : 0;
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
 
-    lista.sort((a, b) => {
-        const fechaA = a && a.savedAt ? new Date(a.savedAt).getTime() : 0;
-        const fechaB = b && b.savedAt ? new Date(b.savedAt).getTime() : 0;
-        return fechaB - fechaA;
-    });
+function limitarAutoguardados(proformas, proformaActualId) {
+    const lista = Array.isArray(proformas) ? proformas.filter(Boolean) : [];
+    lista.sort((a, b) => obtenerTimestampGuardado(b) - obtenerTimestampGuardado(a));
+    if (lista.length <= MAX_AUTOGUARDADOS) return lista;
 
     const recientes = lista.slice(0, MAX_AUTOGUARDADOS);
     if (!proformaActualId) {
@@ -2312,11 +2322,190 @@ function limitarAutoguardados(proformas, proformaActualId) {
     const actual = lista.find(item => item && item.proformaId === proformaActualId);
     if (!actual) return recientes;
 
-    return [actual, ...recientes.slice(0, MAX_AUTOGUARDADOS - 1)].sort((a, b) => {
-        const fechaA = a && a.savedAt ? new Date(a.savedAt).getTime() : 0;
-        const fechaB = b && b.savedAt ? new Date(b.savedAt).getTime() : 0;
-        return fechaB - fechaA;
-    });
+    return [actual, ...recientes.filter(item => item !== actual).slice(0, MAX_AUTOGUARDADOS - 1)]
+        .sort((a, b) => obtenerTimestampGuardado(b) - obtenerTimestampGuardado(a));
+}
+
+function leerProformasAutoguardadas() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY_AUTOGUARDADOS) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function esErrorCuotaLocalStorage(error) {
+    return Boolean(error && (
+        error.name === 'QuotaExceededError' ||
+        error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+        error.code === 22 ||
+        error.code === 1014
+    ));
+}
+
+function escaparHtml(valor) {
+    return String(valor ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function obtenerProductosProformaActual() {
+    const tabla = document.querySelector('#proforma table') || document.querySelector('table');
+    if (!tabla) return [];
+
+    return Array.from(tabla.rows).slice(1).map(row => {
+        const celdas = row.cells || [];
+        if (celdas.length < 4) return null;
+
+        const nombre = (celdas[0].textContent || '').trim();
+        const cantidad = normalizarCantidadDecimal(celdas[1].textContent || '');
+        const precio = parseFloat((celdas[2].textContent || '').replace('$', '').replace(',', '.'));
+
+        if (!nombre || !isFinite(cantidad) || cantidad <= 0 || !isFinite(precio)) return null;
+        return { nombre, cantidad, precio };
+    }).filter(Boolean);
+}
+
+function obtenerEstadoActualProforma() {
+    const nombreClienteInput = document.getElementById('nombreCliente');
+    const rucClienteInput = document.getElementById('rucCliente');
+    const vendedorDisplay = document.getElementById('nombreVendedorDisplay');
+
+    return {
+        version: 1,
+        nombreCliente: nombreClienteInput ? nombreClienteInput.value.trim() : '',
+        rucCliente: rucClienteInput ? rucClienteInput.value.trim() : '',
+        nombreVendedor: vendedorDisplay ? (vendedorDisplay.textContent || '').trim() : '',
+        productos: obtenerProductosProformaActual(),
+        total: obtenerTotalActual()
+    };
+}
+
+function hayContenidoParaAutoguardar(estado) {
+    return Boolean(
+        estado &&
+        (
+            estado.nombreCliente ||
+            estado.rucCliente ||
+            estado.nombreVendedor ||
+            (Array.isArray(estado.productos) && estado.productos.length > 0)
+        )
+    );
+}
+
+function crearHtmlLigeroProforma(estado) {
+    const productosEstado = Array.isArray(estado && estado.productos) ? estado.productos : [];
+    const filas = productosEstado.map(producto => {
+        const nombre = producto.nombre || producto.name || '';
+        const cantidad = normalizarCantidadDecimal(producto.cantidad ?? producto.qty ?? 0);
+        const precio = parseFloat(producto.precio ?? producto.price ?? 0);
+        if (!nombre || !isFinite(cantidad) || cantidad <= 0 || !isFinite(precio)) return '';
+
+        return `<tr><td>${escaparHtml(nombre)}</td><td>${escaparHtml(formatearCantidad(cantidad))}</td><td>$${precio.toFixed(2)}</td><td>$${(precio * cantidad).toFixed(2)}</td><td></td></tr>`;
+    }).join('');
+
+    return `
+        <div id="proforma" data-autoguardado-compacto="true">
+            <input type="text" id="nombreCliente" value="${escaparHtml(estado && estado.nombreCliente ? estado.nombreCliente : '')}">
+            <input type="text" id="rucCliente" value="${escaparHtml(estado && estado.rucCliente ? estado.rucCliente : '')}">
+            <span id="nombreVendedorDisplay">${escaparHtml(estado && estado.nombreVendedor ? estado.nombreVendedor : '')}</span>
+            <table>
+                <tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th><th></th></tr>
+                ${filas}
+            </table>
+        </div>
+    `;
+}
+
+function extraerEstadoDesdeHtmlGuardado(html) {
+    if (!html || typeof html !== 'string') return null;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const tablaGuardada = tempDiv.querySelector('#proforma table') || tempDiv.querySelector('table');
+    const productosExtraidos = [];
+
+    if (tablaGuardada) {
+        Array.from(tablaGuardada.querySelectorAll('tr')).slice(1).forEach(row => {
+            const celdas = row.querySelectorAll('td');
+            if (celdas.length < 4) return;
+
+            const nombre = (celdas[0].textContent || '').trim();
+            const cantidad = normalizarCantidadDecimal(celdas[1].textContent || '');
+            const precio = parseFloat((celdas[2].textContent || '').replace('$', '').replace(',', '.'));
+
+            if (!nombre || !isFinite(cantidad) || cantidad <= 0 || !isFinite(precio)) return;
+            productosExtraidos.push({ nombre, cantidad, precio });
+        });
+    }
+
+    const totalExtraido = productosExtraidos.reduce((acc, item) => acc + (item.precio * item.cantidad), 0);
+    return {
+        version: 1,
+        nombreCliente: tempDiv.querySelector('#nombreCliente')?.value || '',
+        rucCliente: tempDiv.querySelector('#rucCliente')?.value || '',
+        nombreVendedor: (tempDiv.querySelector('#nombreVendedorDisplay')?.textContent || '').trim(),
+        productos: productosExtraidos,
+        total: totalExtraido
+    };
+}
+
+function normalizarAutoguardadoGuardado(item) {
+    if (!item || typeof item !== 'object') return item;
+
+    const estadoGuardado = item.estado || item.state;
+    const estado = (estadoGuardado && Array.isArray(estadoGuardado.productos))
+        ? estadoGuardado
+        : extraerEstadoDesdeHtmlGuardado(item.html);
+    if (!estado) return item;
+
+    return {
+        ...item,
+        estado,
+        html: crearHtmlLigeroProforma(estado),
+        total: Number.isFinite(Number(item.total)) ? Number(item.total) : (estado.total || 0),
+        nombreCliente: item.nombreCliente || estado.nombreCliente || '',
+        rucCliente: item.rucCliente || estado.rucCliente || '',
+        nombreVendedor: item.nombreVendedor || estado.nombreVendedor || ''
+    };
+}
+
+function prepararAutoguardadosParaGuardar(proformas, proformaActualId) {
+    return limitarAutoguardados(proformas, proformaActualId).map(normalizarAutoguardadoGuardado);
+}
+
+function guardarProformasAutoguardadasSeguro(proformas, proformaActualId) {
+    let lista = prepararAutoguardadosParaGuardar(proformas, proformaActualId);
+    let claveExistenteEliminada = false;
+
+    while (lista.length > 0) {
+        try {
+            localStorage.setItem(STORAGE_KEY_AUTOGUARDADOS, JSON.stringify(lista));
+            return lista;
+        } catch (error) {
+            if (!esErrorCuotaLocalStorage(error)) throw error;
+
+            if (!claveExistenteEliminada) {
+                localStorage.removeItem(STORAGE_KEY_AUTOGUARDADOS);
+                claveExistenteEliminada = true;
+                continue;
+            }
+
+            const indiceActual = lista.findIndex(item => item && item.proformaId === proformaActualId);
+            let indiceEliminar = lista.length - 1;
+            if (indiceEliminar === indiceActual && lista.length > 1) {
+                indiceEliminar = lista.length - 2;
+            }
+            lista.splice(indiceEliminar, 1);
+        }
+    }
+
+    localStorage.setItem(STORAGE_KEY_AUTOGUARDADOS, '[]');
+    return [];
 }
 
 // Función para obtener el total actual de la proforma
@@ -2332,13 +2521,7 @@ function obtenerTotalActual() {
 
 // Obtener el próximo número secuencial para autoguardados
 function obtenerProximoNumeroProforma() {
-    let proformasAuto = [];
-    try {
-        proformasAuto = JSON.parse(localStorage.getItem('proformas_autoguardadas') || '[]');
-    } catch(e) { 
-        proformasAuto = []; 
-    }
-    if (!Array.isArray(proformasAuto)) proformasAuto = [];
+    const proformasAuto = leerProformasAutoguardadas();
     
     // Buscar el número más alto existente
     let numeroMasAlto = 0;
@@ -2373,106 +2556,99 @@ function autoguardarProforma() {
         clearTimeout(autoSaveTimeout);
     }
 
-    // Programar autoguardado después de 2 segundos de inactividad
+    // Programar autoguardado después de un momento corto de inactividad
     autoSaveTimeout = setTimeout(function() {
-        const nombreCliente = (document.getElementById('nombreCliente').value || '').trim() || "CONSUMIDOR FINAL";
-        const nombreVendedor = document.getElementById('nombreVendedorDisplay').innerText || "";
-        
-        // Clonar el documento actual
-        let docClone = document.documentElement.cloneNode(true);
-        
-        // Eliminar modales del clon
-        let modales = docClone.querySelectorAll('[id*="modal"]');
-        modales.forEach(modal => modal.remove());
-        
-        // Eliminar overlays del clon
-        let overlays = docClone.querySelectorAll('[style*="background:rgba(0,0,0"]');
-        overlays.forEach(overlay => overlay.remove());
-        
-        // Actualizar campos dinámicos en el clon
-        let htmlClonado = docClone.outerHTML;
-        htmlClonado = htmlClonado.replace(
-            /<input type="text" id="nombreCliente"[^>]*>/,
-            `<input type="text" id="nombreCliente" placeholder="Nombre del Cliente" value="${nombreCliente}">`
-        );
-        htmlClonado = htmlClonado.replace(/<span id="nombreVendedorDisplay"[^>]*>.*<\/span>/,
-            `<span id="nombreVendedorDisplay" style="font-weight: bold;">${nombreVendedor}</span>`
-        );
-        
-        // Guardar en localStorage con timestamp
-        let proformasAuto = [];
-        try {
-            proformasAuto = JSON.parse(localStorage.getItem('proformas_autoguardadas') || '[]');
-        } catch(e) { 
-            proformasAuto = []; 
-        }
-        if (!Array.isArray(proformasAuto)) proformasAuto = [];
-        
-        const ahora = new Date();
-        const fechaFormateada = ahora.toLocaleDateString('es-ES') + ' ' + ahora.toLocaleTimeString('es-ES');
-        
-        // Buscar si ya existe un autoguardado para esta proforma
-        const indiceExistente = proformasAuto.findIndex(p => p.proformaId === proformaId);
-        
-        let nombreProforma;
-        const totalActual = obtenerTotalActual();
-        
-        if (indiceExistente !== -1) {
-            // Actualizar el nombre existente con el nuevo total
-            const numeroExistente = proformasAuto[indiceExistente].name.match(/Proforma (\d+)/);
-            const numero = numeroExistente ? numeroExistente[1] : obtenerProximoNumeroProforma();
-            nombreProforma = `Proforma ${numero}`;
-            if (totalActual > 0) {
-                nombreProforma += ` - $${totalActual.toFixed(2)}`;
-            }
-        } else {
-            // Generar nuevo nombre secuencial para nueva proforma
-            const numeroProforma = obtenerProximoNumeroProforma();
-            nombreProforma = `Proforma ${numeroProforma}`;
-            if (totalActual > 0) {
-                nombreProforma += ` - $${totalActual.toFixed(2)}`;
-            }
-        }
-        
-        const datosAutoguardado = {
-            proformaId: proformaId,
-            name: nombreProforma,
-            savedAt: ahora.toISOString(),
-            html: htmlClonado,
-            isAutoSave: true,
-            lastUpdate: fechaFormateada,
-            total: totalActual,
-            nombreCliente,
-            nombreVendedor
-        };
-        
-        if (indiceExistente !== -1) {
-            // Actualizar autoguardado existente
-            proformasAuto[indiceExistente] = datosAutoguardado;
-        } else {
-            // Crear nuevo autoguardado
-            proformasAuto.push(datosAutoguardado);
-        }
+        autoSaveTimeout = null;
+        ejecutarAutoguardadoProforma();
+    }, AUTOGUARDADO_DELAY_MS);
+}
 
-        proformasAuto = limitarAutoguardados(proformasAuto, proformaId);
-        
-        localStorage.setItem('proformas_autoguardadas', JSON.stringify(proformasAuto));
+function ejecutarAutoguardadoProforma(opciones = {}) {
+    if (!proformaId) {
+        inicializarProformaId();
+    }
 
-        sincronizarProformaEnNube(datosAutoguardado);
-        
-        // Marcar que esta proforma ya fue autoguardada
-        hasAutoSaved = true;
-        
-        // Actualizar estado del botón Nueva Proforma
+    const estadoActual = obtenerEstadoActualProforma();
+    if (!hayContenidoParaAutoguardar(estadoActual)) {
+        hasAutoSaved = false;
         actualizarEstadoBotonNuevaProforma();
-        
-        // Mostrar indicador visual sutil de que se autoguardó
+        return false;
+    }
+
+    const nombreCliente = estadoActual.nombreCliente || "CONSUMIDOR FINAL";
+    const nombreVendedor = estadoActual.nombreVendedor || "";
+    const rucCliente = estadoActual.rucCliente || "";
+    const htmlClonado = crearHtmlLigeroProforma(estadoActual);
+    let proformasAuto = leerProformasAutoguardadas();
+
+    const ahora = new Date();
+    const fechaFormateada = ahora.toLocaleDateString('es-ES') + ' ' + ahora.toLocaleTimeString('es-ES');
+    const indiceExistente = proformasAuto.findIndex(p => p && p.proformaId === proformaId);
+    const totalActual = estadoActual.total || 0;
+
+    let nombreProforma;
+    if (indiceExistente !== -1) {
+        const numeroExistente = (proformasAuto[indiceExistente].name || '').match(/Proforma (\d+)/);
+        const numero = numeroExistente ? numeroExistente[1] : obtenerProximoNumeroProforma();
+        nombreProforma = `Proforma ${numero}`;
+    } else {
+        nombreProforma = `Proforma ${obtenerProximoNumeroProforma()}`;
+    }
+    if (totalActual > 0) {
+        nombreProforma += ` - $${totalActual.toFixed(2)}`;
+    }
+
+    const datosAutoguardado = {
+        proformaId: proformaId,
+        name: nombreProforma,
+        savedAt: ahora.toISOString(),
+        html: htmlClonado,
+        estado: estadoActual,
+        isAutoSave: true,
+        lastUpdate: fechaFormateada,
+        total: totalActual,
+        nombreCliente,
+        rucCliente,
+        nombreVendedor
+    };
+
+    if (indiceExistente !== -1) {
+        proformasAuto[indiceExistente] = datosAutoguardado;
+    } else {
+        proformasAuto.push(datosAutoguardado);
+    }
+
+    try {
+        proformasAuto = guardarProformasAutoguardadasSeguro(proformasAuto, proformaId);
+    } catch (error) {
+        console.error('No se pudo autoguardar la proforma:', error);
+        if (!opciones.silencioso) {
+            mostrarIndicadorAutoguardado('No se pudo autoguardar', true);
+        }
+        return false;
+    }
+
+    sincronizarProformaEnNube(datosAutoguardado);
+
+    hasAutoSaved = proformasAuto.some(item => item && item.proformaId === proformaId);
+    actualizarEstadoBotonNuevaProforma();
+
+    if (!opciones.silencioso) {
         mostrarIndicadorAutoguardado();
-    }, 2000);
+    }
+    return hasAutoSaved;
+}
+
+function forzarAutoguardadoProforma() {
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = null;
+    }
+    return ejecutarAutoguardadoProforma({ silencioso: true });
 }
 
 // Mostrar indicador visual de autoguardado
-function mostrarIndicadorAutoguardado() {
+function mostrarIndicadorAutoguardado(mensaje, esError = false) {
     // Crear o actualizar indicador
     let indicador = document.getElementById('autosave-indicator');
     if (!indicador) {
@@ -2496,7 +2672,8 @@ function mostrarIndicadorAutoguardado() {
     }
     
     const ahora = new Date().toLocaleTimeString('es-ES');
-    indicador.textContent = `✓ Autoguardado ${ahora}`;
+    indicador.style.background = esError ? 'rgba(255, 56, 100, 0.92)' : 'rgba(6, 214, 160, 0.9)';
+    indicador.textContent = mensaje || `✓ Autoguardado ${ahora}`;
     indicador.style.opacity = '1';
     
     setTimeout(() => {
@@ -2530,6 +2707,12 @@ function actualizarEstadoBotonNuevaProforma() {
 document.addEventListener('DOMContentLoaded', function() {
     inicializarProformaId();
     actualizarEstadoBotonNuevaProforma();
+
+    try {
+        guardarProformasAutoguardadasSeguro(leerProformasAutoguardadas(), proformaId);
+    } catch (error) {
+        console.warn('No se pudo normalizar el historial de autoguardado:', error);
+    }
     
     // Configurar listeners para autoguardado en campos importantes
     const nombreCliente = document.getElementById('nombreCliente');
@@ -2575,6 +2758,18 @@ document.addEventListener('DOMContentLoaded', function() {
             autoguardarProforma();
         });
     }
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden' && autoSaveTimeout) {
+            forzarAutoguardadoProforma();
+        }
+    });
+
+    window.addEventListener('beforeunload', function() {
+        if (autoSaveTimeout) {
+            forzarAutoguardadoProforma();
+        }
+    });
 });
 
 // Función para limpiar la proforma y empezar una nueva
@@ -2590,7 +2785,8 @@ function nuevaProforma() {
         crearNuevaProforma();
         
         // Limpiar tabla de productos
-        const tabla = document.querySelector('table');
+        const tabla = document.querySelector('#proforma table') || document.querySelector('table');
+        if (!tabla) return;
         while (tabla.rows.length > 1) {
             tabla.deleteRow(1);
         }
@@ -2647,6 +2843,7 @@ function nuevaProforma() {
 }
 
 window.autoguardarProforma = autoguardarProforma;
+window.forzarAutoguardadoProforma = forzarAutoguardadoProforma;
 window.crearNuevaProforma = crearNuevaProforma;
 window.nuevaProforma = nuevaProforma;
 
@@ -2888,6 +3085,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Variable global para almacenar todas las opciones de productos originales
     let todosLosProductosOptions = [];
+    const PRODUCTOS_CACHE_KEY = 'productos_cache';
+    let productosSheetsPromise = null;
+    let productosCargadosDesdeSheets = false;
+    let origenCatalogoProductos = 'sin_cargar';
+    let ultimoErrorCargaProductos = '';
+    let indiceRapidoTopCotizados = { key: '', map: new Map() };
 
     // Productos básicos embebidos para carga rápida inicial
     const productosBasicosEmbebidos = [
@@ -2908,47 +3111,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Función para cargar productos básicos embebidos (súper rápida)
     function cargarProductosBasicos() {
         console.log("Cargando productos básicos embebidos...");
-        const selectProducto = document.getElementById("producto");
-        const fragment = document.createDocumentFragment();
-        selectProducto.innerHTML = '';
-        todosLosProductosOptions = [];
-
-        productosBasicosEmbebidos.forEach(productoTexto => {
-            const option = document.createElement("option");
-            option.text = productoTexto;
-            todosLosProductosOptions.push(option);
-            fragment.appendChild(option.cloneNode(true));
-        });
-        
-        selectProducto.appendChild(fragment);
-        return true;
+        return reemplazarProductosEnSelect(productosBasicosEmbebidos, 'basicos');
     }
 
     // Función optimizada para cargar productos desde la caché local (localStorage)
     function cargarProductosDesdeCache() {
         try {
-            const productosCacheados = localStorage.getItem('productos_cache');
+            const productosCacheados = localStorage.getItem(PRODUCTOS_CACHE_KEY);
             if (productosCacheados) {
                 const productos = JSON.parse(productosCacheados);
                 
                 // Verificar que el cache tiene datos válidos
-                if (productos && productos.length > 0) {
+                if (Array.isArray(productos) && productos.length > 0) {
                     console.log("⚡ Cargando productos desde cache (" + productos.length + " productos)");
-                    const selectProducto = document.getElementById("producto");
-                    const fragment = document.createDocumentFragment();
-                    selectProducto.innerHTML = '';
-                    todosLosProductosOptions = [];
-
-                    // Usar requestAnimationFrame para no bloquear la UI
-                    productos.forEach(productoTexto => {
-                        const option = document.createElement("option");
-                        option.text = productoTexto;
-                        todosLosProductosOptions.push(option);
-                        fragment.appendChild(option.cloneNode(true));
-                    });
-                    
-                    selectProducto.appendChild(fragment);
-                    return true;
+                    return reemplazarProductosEnSelect(productos, 'cache');
                 }
             }
         } catch (error) {
@@ -2957,17 +3133,120 @@ document.addEventListener('DOMContentLoaded', function() {
         return false; // No hay cache válido
     }
 
+    function reemplazarProductosEnSelect(productosTexto, origen) {
+        const selectProducto = document.getElementById("producto");
+        if (!selectProducto || !Array.isArray(productosTexto) || !productosTexto.length) return false;
+
+        const fragment = document.createDocumentFragment();
+        selectProducto.innerHTML = '';
+        todosLosProductosOptions = [];
+
+        productosTexto.forEach(productoTexto => {
+            const texto = String(productoTexto || '').trim();
+            if (!texto) return;
+
+            const option = document.createElement("option");
+            option.text = texto;
+            todosLosProductosOptions.push(option);
+            fragment.appendChild(option.cloneNode(true));
+        });
+
+        selectProducto.appendChild(fragment);
+        origenCatalogoProductos = origen || 'desconocido';
+        indiceRapidoTopCotizados = { key: '', map: new Map() };
+        return todosLosProductosOptions.length > 0;
+    }
+
+    function parsearCSVProductos(textoCSV) {
+        const filas = [];
+        let fila = [];
+        let campo = '';
+        let entreComillas = false;
+        const texto = String(textoCSV || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+        for (let i = 0; i < texto.length; i++) {
+            const caracter = texto[i];
+            const siguiente = texto[i + 1];
+
+            if (caracter === '"') {
+                if (entreComillas && siguiente === '"') {
+                    campo += '"';
+                    i++;
+                } else {
+                    entreComillas = !entreComillas;
+                }
+            } else if (caracter === ',' && !entreComillas) {
+                fila.push(campo);
+                campo = '';
+            } else if (caracter === '\n' && !entreComillas) {
+                fila.push(campo);
+                filas.push(fila);
+                fila = [];
+                campo = '';
+            } else {
+                campo += caracter;
+            }
+        }
+
+        fila.push(campo);
+        filas.push(fila);
+        return filas;
+    }
+
+    function parsearPrecioProductoHoja(valor) {
+        let texto = String(valor || '').trim();
+        if (!texto) return NaN;
+
+        texto = texto
+            .replace(/\$/g, '')
+            .replace(/\s/g, '')
+            .replace(/[^\d,.-]/g, '');
+
+        if (texto.includes(',') && texto.includes('.')) {
+            texto = texto.replace(/,/g, '');
+        } else if (texto.includes(',') && !texto.includes('.')) {
+            texto = texto.replace(',', '.');
+        }
+
+        const precio = parseFloat(texto);
+        return isFinite(precio) ? precio : NaN;
+    }
+
+    function obtenerProductosDesdeCSVGoogleSheets(data) {
+        const filas = parsearCSVProductos(data);
+        const productosParaCache = [];
+
+        filas.forEach((fila, index) => {
+            const nombreProducto = (fila[0] || '').trim();
+            if (!nombreProducto) return;
+            if (/^>>.*<<$/.test(nombreProducto)) return;
+
+            const nombreNormalizado = typeof normalizarTextoMaterial === 'function' ? normalizarTextoMaterial(nombreProducto) : nombreProducto.toUpperCase();
+            const pareceCabecera = index === 0 && /\b(NOMBRE|PRODUCTO|PRODUCTOS|DESCRIPCION)\b/.test(nombreNormalizado);
+            if (pareceCabecera) return;
+
+            const precioProducto = parsearPrecioProductoHoja(fila[1]);
+            if (!isFinite(precioProducto) || precioProducto <= 0) return;
+
+            productosParaCache.push(`${nombreProducto} - $${precioProducto.toFixed(2)}`);
+        });
+
+        return productosParaCache;
+    }
+
     // Función optimizada para cargar productos desde Google Sheets
     async function cargarProductosDesdeGoogleSheets() {
         const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
+        productosCargadosDesdeSheets = false;
+        ultimoErrorCargaProductos = '';
         try {
             // Usar AbortController para timeout rápido
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos máximo
+            const timeoutId = setTimeout(() => controller.abort(), 9000); // la hoja puede tardar en móviles
             
             const response = await fetch(url, { 
                 signal: controller.signal,
-                cache: 'default' // Permitir cache del navegador
+                cache: 'no-store'
             });
             clearTimeout(timeoutId);
             
@@ -2976,60 +3255,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const data = await response.text();
-            const productos = data.split("\n").map(line => line.split(","));
-            const productosParaCache = [];
+            const productosParaCache = obtenerProductosDesdeCSVGoogleSheets(data);
             
             // Solo procesar si hay productos válidos
-            if (productos.length > 5) { // Mínimo 5 productos para considerar válida la respuesta
-                const selectProducto = document.getElementById("producto");
-                const fragment = document.createDocumentFragment();
-                
-                // No limpiar si ya hay productos cargados, solo actualizar
-                const shouldClear = selectProducto.options.length <= productosBasicosEmbebidos.length;
-                if (shouldClear) {
-                    selectProducto.innerHTML = '';
-                    todosLosProductosOptions = [];
-                }
-
-                productos.forEach(function(producto) {
-                    const nombreProducto = producto[0];
-                    if (!nombreProducto || nombreProducto.trim() === '') return; // Saltar filas vacías
-                    
-                    const precioProducto = producto[1] ? parseFloat(producto[1]) : null;
-                    const option = document.createElement("option");
-                    let textoOpcion;
-                    
-                    if (!isNaN(precioProducto) && precioProducto > 0) {
-                        textoOpcion = `${nombreProducto.trim()} - $${precioProducto.toFixed(2)}`;
-                    } else {
-                        textoOpcion = `${nombreProducto.trim()}`;
-                    }
-                    
-                    option.text = textoOpcion;
-                    productosParaCache.push(textoOpcion);
-                    
-                    if (shouldClear) {
-                        todosLosProductosOptions.push(option);
-                        fragment.appendChild(option.cloneNode(true));
-                    }
-                });
-                
-                if (shouldClear) {
-                    selectProducto.appendChild(fragment);
-                }
-                
-                // Guardar en cache solo si se cargaron más productos que los básicos
-                if (productosParaCache.length > productosBasicosEmbebidos.length) {
-                    localStorage.setItem('productos_cache', JSON.stringify(productosParaCache));
-                    console.log("✅ Productos actualizados desde Google Sheets (" + productosParaCache.length + " productos)");
-                }
+            if (productosParaCache.length > productosBasicosEmbebidos.length) {
+                reemplazarProductosEnSelect(productosParaCache, 'sheets');
+                localStorage.setItem(PRODUCTOS_CACHE_KEY, JSON.stringify(productosParaCache));
+                productosCargadosDesdeSheets = true;
+                console.log("✅ Productos actualizados desde Google Sheets (" + productosParaCache.length + " productos)");
+                return true;
             }
+
+            throw new Error('La hoja no devolvió suficientes productos válidos.');
         } catch (error) {
+            ultimoErrorCargaProductos = error && error.message ? error.message : String(error || 'Error desconocido');
             if (error.name === 'AbortError') {
                 console.log("⚠️ Timeout en carga de Google Sheets - usando datos locales");
             } else {
                 console.log("⚠️ Error al cargar desde Google Sheets - usando datos locales:", error.message);
             }
+            return false;
         }
     }
 
@@ -3043,12 +3288,8 @@ document.addEventListener('DOMContentLoaded', function() {
             cargarProductosBasicos();
         }
         
-        // 3. Actualizar en segundo plano desde internet (sin bloquear la UI)
-        setTimeout(() => {
-            cargarProductosDesdeGoogleSheets().catch(error => {
-                console.log("No se pudo actualizar desde Google Sheets, usando datos locales");
-            });
-        }, 100); // Delay mínimo para no bloquear la carga inicial
+        // 3. Actualizar desde Google Sheets en segundo plano.
+        productosSheetsPromise = cargarProductosDesdeGoogleSheets();
     }
 
     // Inicializar productos tan pronto como el DOM esté listo (más rápido que onload)
@@ -3170,7 +3411,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const GOOGLE_AI_STORAGE_KEY = 'google_ai_material_config_v1';
     const VOICE_BUTTON_POSITION_KEY = 'voice_materials_button_position_v1';
     const TOP_QUOTED_PRODUCTS_STORAGE_KEY = 'top_quoted_products_v1';
-    let indiceRapidoTopCotizados = { key: '', map: new Map() };
     let baseAprendizajeMateriales = cargarBaseAprendizajeMateriales();
     let googleAIConfig = cargarGoogleAIConfig();
     let reconocimientoVozMateriales = null;
@@ -3944,11 +4184,26 @@ document.addEventListener('DOMContentLoaded', function() {
         guardarBaseAprendizajeMateriales();
     }
 
+    function esAliasAprendidoConfiable(aprendido) {
+        if (!aprendido) return false;
+        const fuentesConfiables = new Set([
+            'revision_ocr',
+            'revision_manual',
+            'voz_seleccion_manual',
+            'agregado_manual',
+            'edicion_producto',
+            'correccion_manual',
+            'manual'
+        ]);
+        return fuentesConfiables.has(aprendido.fuente || aprendido.source || '');
+    }
+
     function buscarAliasAprendido(textoOCR, catalogo) {
         const variantesConsulta = generarVariantesMaterial(textoOCR);
         for (const variante of variantesConsulta) {
             const aprendido = baseAprendizajeMateriales.aliases[variante];
             if (!aprendido) continue;
+            if (!esAliasAprendidoConfiable(aprendido)) continue;
             const item = catalogo.find(entry => normalizarTextoMaterial(entry.nombre) === normalizarTextoMaterial(aprendido.nombreCanonico));
             if (item) {
                 return { item, score: 0.99, aprendido: true };
@@ -3979,6 +4234,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 variantes: generarVariantesMaterial(item.nombre, aliasesAprendidos)
             };
         }).filter(item => item.nombre);
+    }
+
+    async function asegurarCatalogoGoogleSheetsParaImportar() {
+        if (!productosCargadosDesdeSheets) {
+            if (productosSheetsPromise) {
+                try {
+                    await productosSheetsPromise;
+                } catch (error) {
+                    ultimoErrorCargaProductos = error && error.message ? error.message : String(error || 'Error desconocido');
+                }
+            }
+
+            if (!productosCargadosDesdeSheets) {
+                productosSheetsPromise = cargarProductosDesdeGoogleSheets();
+                try {
+                    await productosSheetsPromise;
+                } catch (error) {
+                    ultimoErrorCargaProductos = error && error.message ? error.message : String(error || 'Error desconocido');
+                }
+            }
+        }
+
+        if (!productosCargadosDesdeSheets || origenCatalogoProductos !== 'sheets') {
+            const detalle = ultimoErrorCargaProductos ? `\n\nDetalle: ${ultimoErrorCargaProductos}` : '';
+            alert('No se pudo cargar la lista actual desde Google Sheets. No se importará la lista para evitar productos incorrectos.' + detalle);
+            return [];
+        }
+
+        const catalogo = construirCatalogoMateriales();
+        if (!catalogo.length) {
+            alert('No hay materiales cargados desde Google Sheets para comparar la lista.');
+            return [];
+        }
+
+        return catalogo;
     }
 
     function calcularDistanciaLevenshtein(a, b) {
@@ -4355,10 +4645,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? extraerCantidadDesdeLinea(extraido.original, match.item)
                 : extraido.cantidad;
 
-            if (match.score >= 0.82 || match.aprendido || match.flexible) {
-                registrarAprendizajeMaterial(extraido.descripcion, match.item.nombre, match.aprendido ? 'alias_guardado' : 'ocr_alta_confianza');
-            }
-
             agregados.push({
                 nombre: match.item.nombre,
                 precio: match.item.precio,
@@ -4389,11 +4675,11 @@ document.addEventListener('DOMContentLoaded', function() {
             : [];
 
         return aliases
-            .filter(([alias, valor]) => alias && valor && valor.canonical)
+            .filter(([alias, valor]) => alias && valor && (valor.nombreCanonico || valor.canonical))
             .slice(0, limit)
             .map(([alias, valor]) => ({
                 alias,
-                canonical: valor.canonical
+                canonical: valor.nombreCanonico || valor.canonical
             }));
     }
 
@@ -4811,7 +5097,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? '#66bb6a'
                 : '#ffb300';
 
-        const checked = detalle.estado === 'sugerido' ? 'checked' : '';
+        const sugerenciaSegura = detalle.estado === 'sugerido' && (
+            detalle.exacta ||
+            (detalle.ia && score >= 88) ||
+            (!detalle.flexible && score >= 92)
+        );
+        const checked = sugerenciaSegura ? 'checked' : '';
         const disabled = detalle.estado === 'omitido' ? '' : '';
         const nombre = detalle.nombre || detalle.sugerido || '';
         const cantidad = typeof detalle.cantidad === 'number' && isFinite(detalle.cantidad) ? detalle.cantidad : 1;
@@ -5048,9 +5339,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function procesarTextoListaMateriales(textoFuente, origen) {
-        const catalogo = construirCatalogoMateriales();
+        const catalogo = await asegurarCatalogoGoogleSheetsParaImportar();
         if (!catalogo.length) {
-            alert('No hay materiales cargados en la base de datos para comparar la lista.');
             return;
         }
 
@@ -5086,15 +5376,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const catalogo = construirCatalogoMateriales();
-        if (!catalogo.length) {
-            alert('No hay materiales cargados en la base de datos para comparar la imagen.');
-            return;
-        }
-
-        mostrarOverlayOCR('Procesando imagen', 'Preparando lectura OCR...');
-
         try {
+            mostrarOverlayOCR('Cargando productos', 'Leyendo la hoja de Google Sheets...');
+            const catalogoActual = await asegurarCatalogoGoogleSheetsParaImportar();
+            if (!catalogoActual.length) {
+                cerrarOverlayOCR();
+                return;
+            }
+
+            mostrarOverlayOCR('Procesando imagen', 'Preparando lectura OCR...');
             const resultadoOCR = await Tesseract.recognize(file, 'spa+eng', {
                 logger: mensaje => {
                     if (!mensaje || !mensaje.status) return;
@@ -5771,7 +6061,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        const proformas = combinarListasDeProformas(proformasLocales, proformasRemotas);
+        let proformas = combinarListasDeProformas(proformasLocales, proformasRemotas);
+        if (tipo === 'auto') {
+            proformas = limitarAutoguardados(proformas);
+        }
         const seleccionadas = selectionState[tipo];
 
         if (proformas.length === 0) {
@@ -5873,18 +6166,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 openBtn.disabled = true;
                 openBtn.textContent = 'Abriendo...';
                 try {
-                    let htmlContenido = item.html;
-                    if (item.isRemote && (!htmlContenido || typeof htmlContenido !== 'string')) {
+                    let contenidoProforma = item.estado || item.state || item.html;
+                    if (item.isRemote && !contenidoProforma) {
                         if (!window.CloudSync || typeof window.CloudSync.downloadProformaHtml !== 'function') {
                             throw new Error('La descarga en la nube no está disponible.');
                         }
-                        htmlContenido = await window.CloudSync.downloadProformaHtml(item);
+                        contenidoProforma = await window.CloudSync.downloadProformaHtml(item);
                     }
-                    if (!htmlContenido) {
+                    if (!contenidoProforma) {
                         throw new Error('Contenido vacío o no disponible.');
                     }
                     overlay.remove();
-                    cargarProformaEnPagina(htmlContenido);
+                    cargarProformaEnPagina(contenidoProforma);
                     crearNuevaProforma();
                 } catch (err) {
                     alert('No se pudo abrir la proforma: ' + err.message);
@@ -5988,23 +6281,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Cargar la proforma seleccionada en la misma página (DOM)
 function cargarProformaEnPagina(html) {
+    if (html && typeof html === 'object') {
+        cargarProformaEnPagina(crearHtmlLigeroProforma(html));
+        return;
+    }
+
     // Crear un DOM temporal para extraer los datos
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
+    tempDiv.innerHTML = html || '';
     // Extraer valores de los campos principales
     const nombreCliente = tempDiv.querySelector('#nombreCliente')?.value || '';
-    const nombreVendedor = tempDiv.querySelector('#nombreVendedorDisplay')?.innerText || '';
+    const rucCliente = tempDiv.querySelector('#rucCliente')?.value || '';
+    const nombreVendedor = tempDiv.querySelector('#nombreVendedorDisplay')?.textContent || '';
     // Limpiar tabla de productos
-    const tabla = document.querySelector('table');
+    const tabla = document.querySelector('#proforma table') || document.querySelector('table');
+    if (!tabla) return;
     while (tabla.rows.length > 1) tabla.deleteRow(1);
+    productos = {};
     // Extraer filas de productos
-    const filas = tempDiv.querySelectorAll('table tr');
+    const tablaGuardada = tempDiv.querySelector('#proforma table') || tempDiv.querySelector('table');
+    const filas = tablaGuardada ? tablaGuardada.querySelectorAll('tr') : [];
     for (let i = 1; i < filas.length; i++) {
         const celdas = filas[i].querySelectorAll('td');
         if (celdas.length >= 4) {
-            const nombre = celdas[0].innerText;
-            const cantidad = normalizarCantidadDecimal(celdas[1].innerText);
-            const precio = parseFloat(celdas[2].innerText.replace('$',''));
+            const nombre = (celdas[0].textContent || '').trim();
+            const cantidad = normalizarCantidadDecimal(celdas[1].textContent || '');
+            const precio = parseFloat((celdas[2].textContent || '').replace('$',''));
+            if (!nombre || !isFinite(cantidad) || cantidad <= 0 || !isFinite(precio)) {
+                continue;
+            }
             
             // Agregar al objeto productos
             productos[nombre] = { precio: precio, cantidad: cantidad };
@@ -6089,6 +6394,8 @@ function cargarProformaEnPagina(html) {
     }
     // Actualizar campos principales
     document.getElementById('nombreCliente').value = nombreCliente;
+    const rucInput = document.getElementById('rucCliente');
+    if (rucInput) rucInput.value = rucCliente;
     document.getElementById('nombreVendedorDisplay').innerText = nombreVendedor;
     calcularTotal();
 }
