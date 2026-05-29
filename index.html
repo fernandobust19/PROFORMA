@@ -2298,6 +2298,10 @@ let hasAutoSaved = false; // Indica si la proforma actual ya fue autoguardada
 const MAX_AUTOGUARDADOS = 50;
 const AUTOGUARDADO_DELAY_MS = 1000;
 const STORAGE_KEY_AUTOGUARDADOS = 'proformas_autoguardadas';
+const UPCONS_CALC_MATERIALS_EVENT = 'upcons:materiales-calculados';
+const UPCONS_CALC_MATERIALS_STORAGE = 'upcons_materiales_calculados';
+let ultimoPayloadCalculadoraMateriales = '';
+let ultimaFirmaMaterialesCalculadora = '';
 
 // Generar ID único para cada nueva proforma
 function generarProformaId() {
@@ -2915,9 +2919,7 @@ function abrirCalculadoraMateriales() {
         const ventana = window.open(url, '_blank');
         if (!ventana) {
             alert('No se pudo abrir la calculadora. Permite ventanas emergentes para este sitio.');
-            return;
         }
-        ventana.opener = null;
     };
 
     if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
@@ -4727,6 +4729,214 @@ function abrirCalculadoraMateriales() {
 
         return { agregados, omitidos, detalles };
     }
+
+    function construirFirmaMaterialesCalculadora(items) {
+        try {
+            return JSON.stringify((items || [])
+                .map(item => ({
+                    nombre: normalizarTextoMaterial(item && item.nombre),
+                    especificacion: normalizarTextoMaterial(item && item.especificacion),
+                    cantidad: normalizarCantidadDecimal(item && item.cantidad)
+                }))
+                .filter(item => item.nombre && isFinite(item.cantidad) && item.cantidad > 0)
+                .sort((a, b) => (a.nombre + a.especificacion).localeCompare(b.nombre + b.especificacion)));
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function obtenerIdPayloadCalculadoraMateriales(payload) {
+        if (!payload || typeof payload !== 'object') return '';
+        if (payload.id) return String(payload.id);
+        return construirFirmaMaterialesCalculadora(payload.items || []);
+    }
+
+    function construirTextosBusquedaMaterialCalculadora(item) {
+        const nombre = String(item && item.nombre || '').trim();
+        const especificacion = String(item && item.especificacion || '').trim();
+        const unidad = String(item && item.unidad || '').trim();
+        const sinParentesis = nombre.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+        const textos = [
+            nombre,
+            sinParentesis,
+            especificacion ? `${nombre} ${especificacion}` : '',
+            especificacion && sinParentesis !== nombre ? `${sinParentesis} ${especificacion}` : '',
+            unidad ? `${nombre} ${unidad}` : ''
+        ];
+
+        return Array.from(new Set(textos.map(texto => texto.trim()).filter(Boolean)));
+    }
+
+    function buscarCoincidenciaExactaCalculadora(texto, catalogo) {
+        const variantesConsulta = new Set(generarVariantesMaterial(texto));
+        if (!variantesConsulta.size) return null;
+
+        let exacta = null;
+        catalogo.forEach(item => {
+            const variantesCatalogo = item.variantes || [item.normalizado];
+            if (variantesCatalogo.some(variante => variantesConsulta.has(variante))) {
+                exacta = { item, score: 1, exacta: true };
+            }
+        });
+
+        return exacta;
+    }
+
+    function resolverProductoCalculadoraEnCatalogo(itemCalculadora, catalogo) {
+        const textos = construirTextosBusquedaMaterialCalculadora(itemCalculadora);
+        let mejor = null;
+
+        textos.forEach(texto => {
+            const exacta = buscarCoincidenciaExactaCalculadora(texto, catalogo);
+            if (exacta && (!mejor || exacta.score > mejor.score)) {
+                mejor = { ...exacta, textoUsado: texto };
+                return;
+            }
+
+            const match = encontrarMejorCoincidenciaMaterial(texto, catalogo);
+            if (match && match.item && (!mejor || (match.score || 0) > (mejor.score || 0))) {
+                mejor = { ...match, textoUsado: texto };
+            }
+        });
+
+        return mejor;
+    }
+
+    function esCoincidenciaAutomaticaCalculadora(match) {
+        if (!match || !match.item || !isFinite(match.item.precio) || match.item.precio <= 0) {
+            return false;
+        }
+        if (match.exacta || match.aprendido) return true;
+        if (match.flexible) return (match.score || 0) >= 0.9;
+        const compatibilidadNumerica = calcularCompatibilidadNumerica(match.textoUsado || '', match.item);
+        if (compatibilidadNumerica.exactitudDimension >= 0.8 && (match.score || 0) >= 0.78) return true;
+        if (compatibilidadNumerica.score >= 0.9 && (match.score || 0) >= 0.82) return true;
+        return (match.score || 0) >= 0.86;
+    }
+
+    function construirLineaOriginalCalculadora(item, cantidad) {
+        const nombre = String(item && item.nombre || '').trim();
+        const especificacion = String(item && item.especificacion || '').trim();
+        const unidad = String(item && item.unidad || '').trim();
+        return `${formatearCantidad(cantidad)} ${nombre}${unidad ? ' ' + unidad : ''}${especificacion ? ' - ' + especificacion : ''}`.trim();
+    }
+
+    async function importarMaterialesDesdeCalculadora(payload) {
+        if (!payload || payload.type !== UPCONS_CALC_MATERIALS_EVENT || !Array.isArray(payload.items) || !payload.items.length) {
+            return;
+        }
+
+        const payloadId = obtenerIdPayloadCalculadoraMateriales(payload);
+        const firma = construirFirmaMaterialesCalculadora(payload.items);
+        if ((payloadId && payloadId === ultimoPayloadCalculadoraMateriales) || (firma && firma === ultimaFirmaMaterialesCalculadora)) {
+            return;
+        }
+
+        const payloadAnterior = ultimoPayloadCalculadoraMateriales;
+        const firmaAnterior = ultimaFirmaMaterialesCalculadora;
+        ultimoPayloadCalculadoraMateriales = payloadId;
+        if (firma) ultimaFirmaMaterialesCalculadora = firma;
+
+        mostrarOverlayOCR('Importando calculadora', 'Buscando productos en Google Sheets...');
+
+        try {
+            const catalogo = await asegurarCatalogoGoogleSheetsParaImportar();
+            if (!catalogo.length) {
+                ultimoPayloadCalculadoraMateriales = payloadAnterior;
+                ultimaFirmaMaterialesCalculadora = firmaAnterior;
+                cerrarOverlayOCR();
+                return;
+            }
+
+            const agregados = [];
+            const detalles = [];
+            const omitidos = [];
+
+            payload.items.forEach(item => {
+                const cantidad = normalizarCantidadDecimal(item && item.cantidad);
+                if (!isFinite(cantidad) || cantidad <= 0) return;
+
+                const match = resolverProductoCalculadoraEnCatalogo(item, catalogo);
+                const original = construirLineaOriginalCalculadora(item, cantidad);
+
+                if (esCoincidenciaAutomaticaCalculadora(match)) {
+                    agregados.push({
+                        nombre: match.item.nombre,
+                        precio: match.item.precio,
+                        cantidad,
+                        score: match.score || 1,
+                        origen: original
+                    });
+                    return;
+                }
+
+                const tienePrecio = match && match.item && isFinite(match.item.precio) && match.item.precio > 0;
+                if (!tienePrecio) {
+                    omitidos.push(`"${original}"`);
+                }
+
+                detalles.push({
+                    original,
+                    descripcion: String(item && item.nombre || ''),
+                    cantidad,
+                    estado: tienePrecio ? 'sugerido' : 'omitido',
+                    nombre: tienePrecio ? match.item.nombre : '',
+                    sugerido: tienePrecio ? match.item.nombre : '',
+                    precio: tienePrecio ? match.item.precio : 0,
+                    score: match && match.score ? match.score : 0,
+                    exacta: Boolean(match && match.exacta),
+                    flexible: Boolean(match && match.flexible),
+                    motivo: tienePrecio ? 'Coincidencia pendiente de confirmar' : 'No se encontro en Google Sheets'
+                });
+            });
+
+            const consolidados = consolidarMaterialesReconocidos(agregados);
+            consolidados.forEach(item => {
+                agregarProductoDesdeDatos(item.nombre, item.precio, item.cantidad, 'calculadora_materiales');
+            });
+
+            cerrarOverlayOCR();
+
+            if (detalles.length) {
+                mostrarModalRevisionOCR({
+                    agregados: consolidados,
+                    omitidos,
+                    detalles
+                }, 'calculadora_materiales');
+                return;
+            }
+
+            mostrarResumenImportacionOCR({
+                agregados: consolidados,
+                omitidos
+            });
+        } catch (error) {
+            ultimoPayloadCalculadoraMateriales = payloadAnterior;
+            ultimaFirmaMaterialesCalculadora = firmaAnterior;
+            cerrarOverlayOCR();
+            console.error('No se pudo importar desde la calculadora:', error);
+            alert('No se pudo importar el resumen de la calculadora al proformador.');
+        }
+    }
+
+    window.addEventListener('message', function(event) {
+        const payload = event.data;
+        if (payload && payload.type === UPCONS_CALC_MATERIALS_EVENT) {
+            importarMaterialesDesdeCalculadora(payload);
+        }
+    });
+
+    window.addEventListener('storage', function(event) {
+        if (event.key !== UPCONS_CALC_MATERIALS_STORAGE || !event.newValue) return;
+        try {
+            const payload = JSON.parse(event.newValue);
+            if (payload && payload.type === UPCONS_CALC_MATERIALS_EVENT) {
+                importarMaterialesDesdeCalculadora(payload);
+            }
+        } catch (error) {
+            console.warn('No se pudo leer el resumen de la calculadora:', error);
+        }
+    });
 
     function obtenerMuestrasAprendizajeIA(limit = 60) {
         const aliases = baseAprendizajeMateriales && baseAprendizajeMateriales.aliases

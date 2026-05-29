@@ -148,6 +148,88 @@
                 .join(", ");
         }
 
+        const UPCONS_CALC_MATERIALS_EVENT = 'upcons:materiales-calculados';
+        const UPCONS_CALC_MATERIALS_STORAGE = 'upcons_materiales_calculados';
+
+        function crearItemProformador(nombre, cantidad, unidad, especificacion = '') {
+            const qty = Number(cantidad);
+            if (!nombre || !isFinite(qty) || qty <= 0) return null;
+            return {
+                nombre: String(nombre).trim(),
+                especificacion: String(especificacion || '').trim(),
+                cantidad: qty,
+                unidad: unidad || 'unid.'
+            };
+        }
+
+        function construirMaterialesParaProformador(resultados) {
+            if (!resultados || !resultados.parametros) return [];
+
+            const p = resultados.parametros;
+            const items = [
+                crearItemProformador(p.perfilColumna, resultados.tubosColumnasConSobrantes, 'tubos de 6m', 'Columnas'),
+                crearItemProformador(p.perfilViga, resultados.tubosVigas, 'tubos de 6m', 'Vigas principales'),
+                p.incluirVigaUnion
+                    ? crearItemProformador(p.perfilVigaUnion, resultados.tubosVigaUnion, 'tubos de 6m', 'Viga de union')
+                    : null,
+                crearItemProformador(p.perfilCorrea, resultados.tubosCorreasConSobrantes, 'correas de 6m', 'Correas')
+            ];
+
+            Object.entries(resultados.desgloseTejas || {}).forEach(([medida, cantidad]) => {
+                items.push(crearItemProformador(`${p.coberturaNombre} ${medida} m`, cantidad, 'unid.', `${medida} m`));
+            });
+
+            if (resultados.cumbreros > 0) {
+                items.push(crearItemProformador('Cumbreros 1.05 m', resultados.cumbreros, 'unid.', '1.05 m'));
+            }
+
+            items.push(crearItemProformador(p.tornillosLabel, resultados.totalTornillos, 'unid.', '9 p/plancha + extras cumbrero'));
+
+            if (resultados.canalesDetalle) {
+                [
+                    ['Canal lluvia tramo 6 m', resultados.canalesDetalle.c6, 'Tramo 6 m'],
+                    ['Canal lluvia tramo 5 m', resultados.canalesDetalle.c5, 'Tramo 5 m'],
+                    ['Canal lluvia tramo 4 m', resultados.canalesDetalle.c4, 'Tramo 4 m'],
+                    ['Canal lluvia tramo 3 m', resultados.canalesDetalle.c3, 'Tramo 3 m'],
+                    ['Tapas canal lluvia', resultados.canalesDetalle.tapas, 'Extremos'],
+                    ['Pitones canal lluvia', resultados.canalesDetalle.pitones, 'Desague'],
+                    ['Abrazaderas canal lluvia', resultados.canalesDetalle.ganchos, 'Ganchos soporte']
+                ].forEach(([nombre, cantidad, especificacion]) => {
+                    items.push(crearItemProformador(nombre, cantidad, 'unid.', especificacion));
+                });
+            }
+
+            return items.filter(Boolean);
+        }
+
+        function enviarMaterialesAlProformador(resultados) {
+            const items = construirMaterialesParaProformador(resultados);
+            if (!items.length) return false;
+
+            const payload = {
+                type: UPCONS_CALC_MATERIALS_EVENT,
+                version: 1,
+                id: `calc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                generatedAt: new Date().toISOString(),
+                source: 'index2.html',
+                items,
+                parametros: resultados.parametros
+            };
+
+            try {
+                localStorage.setItem(UPCONS_CALC_MATERIALS_STORAGE, JSON.stringify(payload));
+            } catch (error) {
+                console.warn('No se pudo guardar el resumen para el proformador:', error);
+            }
+
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage(payload, '*');
+                return true;
+            }
+
+            return false;
+        }
+
         function planCortesPerfil(piezas, kerf, largoStock = 6) {
             let unionesNecesarias = 0;
             const segmentos = [];
@@ -922,6 +1004,7 @@
             const [activePlanConfig, setActivePlanConfig] = useState(null);
             const [floatingPos, setFloatingPos] = useState(null);
             const [isDragging, setIsDragging] = useState(false);
+            const [syncStatus, setSyncStatus] = useState('');
             const dragOffsetRef = useRef({ x: 0, y: 0 });
             const dragTimerRef = useRef(null);
             const didDragRef = useRef(false);
@@ -1318,7 +1401,7 @@
                         recomendaciones.push("Advertencia: hay traslapes en largo que no coinciden con una correa. Se recomienda reajustar la separacion de correas.");
                     }
 
-                    setResultados({
+                    const nuevoResultados = {
                         desgloseTejas, totalTornillos, tubosColumnas, tubosVigas, tubosCorreas,
                         totalColumnasNum, numCorreasPorAgua, cumbreros, canalesDetalle, numColumnasPorFila,
                         tubosVigaUnion: tubosVigaUnionPlan,
@@ -1358,7 +1441,14 @@
                             cortesAlineados,
                             sepCorreasSugerida
                         }
-                    });
+                    };
+
+                    setResultados(nuevoResultados);
+                    const enviado = enviarMaterialesAlProformador(nuevoResultados);
+                    setSyncStatus(enviado
+                        ? 'Resumen enviado al proformador.'
+                        : 'Resumen calculado. Abre esta calculadora desde el proformador para enviarlo automaticamente.'
+                    );
 
                     setTimeout(() => {
                         document.getElementById('panel-resultados')?.scrollIntoView({ behavior: 'smooth' });
@@ -1708,6 +1798,7 @@
                             <button onClick={calcular} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.4)] transition duration-200 text-sm flex justify-center items-center">
                                 PROCESAR CALCULO ESTRUCTURAL
                             </button>
+                            {syncStatus && <div className="mt-2 text-center text-[11px] text-blue-200">{syncStatus}</div>}
                         </div>
                     </div>
 
@@ -1744,6 +1835,7 @@
                             <div className="w-full flex flex-col items-center">
                                 {/* Boton Descargar Centrado al Contenedor */}
                                 <div className="w-full max-w-[800px] flex justify-end mb-4 sticky top-4 z-50">
+                                    {syncStatus && <div className="mr-auto self-center text-[11px] font-semibold text-blue-800 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">{syncStatus}</div>}
                                     <button onClick={descargarPDF} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-full shadow-xl flex items-center transition duration-200 border-2 border-red-500">
                                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                         Exportar PDF Exacto
