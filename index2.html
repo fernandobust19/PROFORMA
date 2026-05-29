@@ -1,0 +1,2322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Cubiertas Pro - Canvas Edition</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React & ReactDOM (production, free CDN) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- html2canvas + jsPDF (free, for PDF export compatibility) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- html2pdf.js (free) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        body, html { margin: 0; padding: 0; background-color: #0f172a; }
+
+        .label-pro { display: block; font-size: 0.75rem; font-weight: 600; color: #94a3b8; margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .input-pro { width: 100%; padding: 0.625rem; border: 1px solid #334155; border-radius: 0.375rem; background-color: #1e293b; color: white; outline: none; font-size: 0.875rem; transition: all 0.2s; }
+        .input-pro:focus { box-shadow: 0 0 0 2px #3b82f6; }
+
+        /* Directivas Estrictas para el PDF */
+        .evitar-corte {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            display: block;
+        }
+
+        /* Scrollbar styles for left panel and mobile wrapper */
+        .custom-scrollbar { -webkit-overflow-scrolling: touch; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px;}
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .pdf-exporting {
+            transform: none !important;
+        }
+
+        .plan-block {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            padding-top: 2px;
+        }
+
+        .plan-block--page {
+            page-break-before: always;
+            break-before: page;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- CONSTANTES Y LÓGICA DE OPTIMIZACIÓN ---
+        const TEJAS_DISPONIBLES = [6.13, 5.0, 4.16, 3.70, 3.0, 2.40];
+        const TRASLAPE_VERTICAL_TEJA = 0.16;
+        const ANCHO_UTIL_TEJA = 0.95;
+        const ANCHO_PLANCHA_TEJA = 1.05;
+        const TRASLAPE_ONDAS_TEJA = 0.10;
+
+        const METALES_DISPONIBLES = [6.0, 5.0, 4.20, 4.0, 3.60, 3.0, 2.40];
+        const TRASLAPE_VERTICAL_METAL = 0.20;
+        const ANCHO_PLANCHA_METAL = 1.10;
+        const TRASLAPE_ONDAS_METAL = 0.10;
+        const ANCHO_UTIL_METAL = ANCHO_PLANCHA_METAL - TRASLAPE_ONDAS_METAL;
+
+        function optimizarPlanchas(longitud, longitudesDisponibles, traslapeVertical) {
+            let restante = Math.round(longitud * 1000) / 1000;
+            let mejorCombinacion = [];
+            let menorDesperdicio = Infinity;
+
+            for (let t1 of longitudesDisponibles) {
+                if (t1 >= restante) {
+                    let desp = t1 - restante;
+                    if (desp < menorDesperdicio) { menorDesperdicio = desp; mejorCombinacion = [t1]; }
+                }
+            }
+
+            for (let t1 of longitudesDisponibles) {
+                for (let t2 of longitudesDisponibles) {
+                    let logitudTotal = Math.round((t1 + t2 - traslapeVertical) * 1000) / 1000;
+                    if (logitudTotal >= restante) {
+                        let desp = logitudTotal - restante;
+                        if (desp < menorDesperdicio) { menorDesperdicio = desp; mejorCombinacion = [t1, t2]; }
+                    }
+                }
+            }
+
+            if (menorDesperdicio > 1.5) {
+                for (let t1 of longitudesDisponibles) {
+                    for (let t2 of longitudesDisponibles) {
+                        for (let t3 of longitudesDisponibles) {
+                            let logitudTotal = Math.round((t1 + t2 + t3 - (traslapeVertical * 2)) * 1000) / 1000;
+                            if (logitudTotal >= restante) {
+                                let desp = logitudTotal - restante;
+                                if (desp < menorDesperdicio) { menorDesperdicio = desp; mejorCombinacion = [t1, t2, t3]; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (mejorCombinacion.length === 0) mejorCombinacion = [longitudesDisponibles[0]];
+            return mejorCombinacion;
+        }
+
+        function calcularTubos6m(longitudTotalMeters) { return Math.ceil(longitudTotalMeters / 6); }
+
+        function calcularCanales(longitud) {
+            let restante = longitud;
+            let c6 = 0, c5 = 0, c4 = 0, c3 = 0;
+            c6 = Math.floor(restante / 6);
+            restante = restante % 6;
+            if (restante > 5) { c6++; restante = 0; }
+            else if (restante > 4) { c5++; restante = 0; }
+            else if (restante > 3) { c4++; restante = 0; }
+            else if (restante > 0) { c3++; restante = 0; }
+            return { c6, c5, c4, c3 };
+        }
+
+        function round2(value) {
+            return Math.round(value * 100) / 100;
+        }
+
+        function resumenPiezas(piezas) {
+            const mapa = {};
+            piezas.forEach((p) => {
+                const key = round2(p).toFixed(2);
+                mapa[key] = (mapa[key] || 0) + 1;
+            });
+            return Object.entries(mapa)
+                .map(([len, count]) => `${count} x ${len}m`)
+                .join(", ");
+        }
+
+        function planCortesPerfil(piezas, kerf, largoStock = 6) {
+            let unionesNecesarias = 0;
+            const segmentos = [];
+            piezas
+                .filter((p) => p > 0)
+                .forEach((len) => {
+                    if (len <= largoStock) {
+                        segmentos.push(len);
+                        return;
+                    }
+                    let restante = len;
+                    while (restante > largoStock + 1e-6) {
+                        segmentos.push(largoStock);
+                        restante -= largoStock;
+                        unionesNecesarias += 1;
+                    }
+                    if (restante > 0) {
+                        segmentos.push(restante);
+                    }
+                });
+
+            const piezasOrdenadas = segmentos.sort((a, b) => b - a);
+
+            const tubos = [];
+            piezasOrdenadas.forEach((len) => {
+                const lenConKerf = len + kerf;
+                let colocado = false;
+                for (const tubo of tubos) {
+                    if (tubo.usado + lenConKerf <= largoStock + 1e-6) {
+                        tubo.piezas.push(len);
+                        tubo.usado += lenConKerf;
+                        colocado = true;
+                        break;
+                    }
+                }
+                if (!colocado) {
+                    tubos.push({ piezas: [len], usado: lenConKerf });
+                }
+            });
+
+            const detalleTubos = tubos.map((t) => {
+                const sobrante = Math.max(0, round2(largoStock - t.usado));
+                return {
+                    piezas: t.piezas.map((p) => round2(p)),
+                    sobrante
+                };
+            });
+
+            const totalSobrante = round2(
+                detalleTubos.reduce((acc, t) => acc + t.sobrante, 0)
+            );
+
+            const sobrantesMap = {};
+            detalleTubos.forEach((t) => {
+                if (t.sobrante >= 1) {
+                    const key = round2(t.sobrante).toFixed(2);
+                    sobrantesMap[key] = (sobrantesMap[key] || 0) + 1;
+                }
+            });
+
+            return {
+                detalleTubos,
+                totalSobrante,
+                totalTubos: detalleTubos.length,
+                unionesNecesarias,
+                sobrantesMap
+            };
+        }
+
+        // --- COMPONENTES CANVAS DEDICADOS ---
+
+        const ElevationCanvas = ({ parametros }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                canvas.width = 800; canvas.height = 260;
+                ctx.clearRect(0, 0, 800, 250);
+
+                ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(50, 200); ctx.lineTo(750, 200); ctx.stroke();
+
+                const drawLeaderDown = (px, py, tx, ty, text, color = "#0f172a") => {
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    const textW = ctx.measureText(text).width;
+                    const startX = tx + textW + 6;
+                    const startY = ty + 2;
+
+                    ctx.strokeStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(startX + 10, startY);
+                    ctx.lineTo(px, py);
+                    ctx.stroke();
+
+                    ctx.beginPath(); ctx.arc(px, py, 2, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
+
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, tx, ty);
+                };
+
+                const drawDimH = (x1, x2, y, text, color = "#111") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + arrow, y - 2); ctx.lineTo(x1 + arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 - arrow, y - 2); ctx.lineTo(x2 - arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x1, y - ext); ctx.lineTo(x1, y + ext); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y - ext); ctx.lineTo(x2, y + ext); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+                    ctx.fillText(text, (x1 + x2) / 2, y - 4);
+                };
+
+                const drawDimV = (x, y1, y2, text, color = "#111") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x - 2, y1 + arrow); ctx.lineTo(x + 2, y1 + arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x, y2); ctx.lineTo(x - 2, y2 - arrow); ctx.lineTo(x + 2, y2 - arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y1); ctx.lineTo(x + ext, y1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y2); ctx.lineTo(x + ext, y2); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, x + 6, (y1 + y2) / 2);
+                };
+
+                const drawDimSlope = (x1, y1, x2, y2, text, color = "#111") => {
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const len = Math.hypot(dx, dy) || 1;
+                    const nx = -dy / len;
+                    const ny = dx / len;
+                    const offset = 10;
+                    const ox1 = x1 + nx * offset;
+                    const oy1 = y1 + ny * offset;
+                    const ox2 = x2 + nx * offset;
+                    const oy2 = y2 + ny * offset;
+                    const arrow = 5;
+
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(ox1, oy1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(ox2, oy2); ctx.stroke();
+
+                    ctx.beginPath(); ctx.moveTo(ox1, oy1); ctx.lineTo(ox2, oy2); ctx.stroke();
+
+                    const ux = dx / len;
+                    const uy = dy / len;
+                    ctx.beginPath();
+                    ctx.moveTo(ox1, oy1);
+                    ctx.lineTo(ox1 + ux * arrow - uy * 2, oy1 + uy * arrow + ux * 2);
+                    ctx.lineTo(ox1 + ux * arrow + uy * 2, oy1 + uy * arrow - ux * 2);
+                    ctx.closePath(); ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.moveTo(ox2, oy2);
+                    ctx.lineTo(ox2 - ux * arrow - uy * 2, oy2 - uy * arrow + ux * 2);
+                    ctx.lineTo(ox2 - ux * arrow + uy * 2, oy2 - uy * arrow - ux * 2);
+                    ctx.closePath(); ctx.fill();
+
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, (ox1 + ox2) / 2, (oy1 + oy2) / 2 - 6);
+                };
+
+                const drawLabel = (x, y, text, color = "#0f172a") => {
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, x, y);
+                };
+
+                if (parametros.tipoTecho === '1') {
+                    ctx.fillStyle = '#CBD5E1';
+                    ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
+                    ctx.beginPath(); ctx.moveTo(140, 50); ctx.lineTo(565, 120); ctx.stroke();
+                    const leftTop = { x: 150, y: 50 };
+                    const rightTop = { x: 550, y: 120 };
+                    const posiciones = Array.isArray(parametros.posicionesCaida) && parametros.posicionesCaida.length > 0
+                        ? parametros.posicionesCaida
+                        : [0, parametros.caida];
+                    const puntos = posiciones.map((pos) => {
+                        const ratio = Math.max(0, Math.min(1, pos / (parametros.caida || 1)));
+                        const colX = 150 + ((550 - 150) * ratio);
+                        const colY = 50 + ((120 - 50) * ratio);
+                        ctx.fillRect(colX - 7, colY, 15, 200 - colY);
+                        return { x: colX, y: colY, pos };
+                    });
+                    if (puntos.length > 1) {
+                        for (let i = 0; i < puntos.length - 1; i++) {
+                            const dist = round2(puntos[i + 1].pos - puntos[i].pos);
+                            drawDimSlope(puntos[i].x, puntos[i].y, puntos[i + 1].x, puntos[i + 1].y, `${dist}m`, "#111");
+                        }
+                    }
+                    if (parametros.volado > 0) {
+                        ctx.strokeStyle = '#EA580C'; ctx.beginPath(); ctx.moveTo(565, 120); ctx.lineTo(620, 133); ctx.stroke();
+                        drawLeaderDown(620, 133, 640, 105, `Volado: ${parametros.volado}m`, "#EA580C");
+                    }
+                    drawDimV(115, 50, 200, `H Max: ${parametros.hAlta}m`, "#333");
+                    drawDimV(585, 120, 200, `H Min: ${parametros.hBaja}m`, "#333");
+                    drawDimH(150, 550, 225, `Caida Base: ${parametros.caida}m`, "#333");
+                } else {
+                    ctx.fillStyle = '#CBD5E1';
+                    ctx.fillRect(150, 120, 15, 80);
+                    if (parametros.incluirColumnasCentrales) {
+                        ctx.fillRect(400, 50, 15, 150);
+                    }
+                    ctx.fillRect(650, 120, 15, 80);
+                    ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
+                    ctx.beginPath(); ctx.moveTo(150, 120); ctx.lineTo(407, 50); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(407, 50); ctx.lineTo(665, 120); ctx.stroke();
+                    if ((parametros.perfilViga || "").includes("75x75")) {
+                        const yTensor = 95;
+                        const xLeft = 150 + (yTensor - 120) * (407 - 150) / (50 - 120);
+                        const xRight = 407 + (yTensor - 50) * (665 - 407) / (120 - 50);
+                        ctx.strokeStyle = '#92400E'; ctx.lineWidth = 4;
+                        ctx.beginPath(); ctx.moveTo(xLeft, yTensor); ctx.lineTo(xRight, yTensor); ctx.stroke();
+                        drawLabel(420, 70, "Tensor 75x75", "#92400E");
+                        if (parametros.tensorLongitud > 0) {
+                            drawDimSlope(xLeft, yTensor, xRight, yTensor, `Tensor: ${parametros.tensorLongitud}m`, "#92400E");
+                        }
+                    }
+                    if (parametros.volado > 0) {
+                        ctx.strokeStyle = '#EA580C'; ctx.beginPath(); ctx.moveTo(95, 133); ctx.lineTo(150, 120); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(665, 120); ctx.lineTo(720, 133); ctx.stroke();
+                    }
+                    drawDimSlope(150, 120, 407, 50, `Caida: ${parametros.caida}m`, "#1F2937");
+                    drawDimSlope(407, 50, 665, 120, `Caida: ${parametros.caida}m`, "#1F2937");
+                    drawDimV(430, 50, 200, `H Centro Max: ${parametros.hAlta}m`, "#333");
+                    drawDimV(135, 120, 200, `H Alero Min: ${parametros.hBaja}m`, "#333");
+                    drawDimH(150, 650, 225, `Caida base (Por Lado): ${parametros.caida}m`, "#333");
+                }
+
+                const vigaAnchorX = parametros.tipoTecho === '1' ? 260 : 260;
+                const vigaAnchorY = parametros.tipoTecho === '1'
+                    ? (50 + (120 - 50) * (vigaAnchorX - 140) / (565 - 140))
+                    : (120 + (50 - 120) * (vigaAnchorX - 150) / (407 - 150));
+
+                drawLabel(70, 24, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
+                drawLabel(260, 38, `Viga: ${parametros.perfilViga}`, "#0f172a");
+            }, [parametros]);
+            return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
+        };
+
+        const ColumnsVigasCanvas = ({ resultados }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                canvas.width = 800; canvas.height = 210;
+                ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, 800, 250);
+                ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.strokeRect(50, 40, 700, 160);
+
+                const { numColumnasPorFila, parametros } = resultados;
+                const segmentosCount = Math.max(1, numColumnasPorFila - 1);
+                const sepBase = parametros.dividirColumnasLargo
+                    ? parametros.sepColumnasUsada
+                    : parametros.sepColumnasLargo;
+                const segmentos = [];
+                for (let i = 0; i < segmentosCount; i++) {
+                    if (parametros.dividirColumnasLargo) {
+                        segmentos.push(sepBase);
+                    } else if (i < segmentosCount - 1) {
+                        segmentos.push(sepBase);
+                    } else {
+                        const last = Math.max(0.1, round2(parametros.largo - sepBase * (segmentosCount - 1)));
+                        segmentos.push(last);
+                    }
+                }
+
+                const posiciones = [0];
+                segmentos.forEach((len) => {
+                    posiciones.push(round2(posiciones[posiciones.length - 1] + len));
+                });
+
+                const drawLabel = (x, y, text, color = "#0f172a") => {
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, x, y);
+                };
+
+                const drawDimH = (x1, x2, y, text, color = "#111") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + arrow, y - 2); ctx.lineTo(x1 + arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 - arrow, y - 2); ctx.lineTo(x2 - arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x1, y - ext); ctx.lineTo(x1, y + ext); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y - ext); ctx.lineTo(x2, y + ext); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+                    ctx.fillText(text, (x1 + x2) / 2, y - 4);
+                };
+
+                const drawDimV = (x, y1, y2, text, color = "#111") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x - 2, y1 + arrow); ctx.lineTo(x + 2, y1 + arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x, y2); ctx.lineTo(x - 2, y2 - arrow); ctx.lineTo(x + 2, y2 - arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y1); ctx.lineTo(x + ext, y1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y2); ctx.lineTo(x + ext, y2); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, x + 6, (y1 + y2) / 2);
+                };
+
+                for (let i = 0; i < numColumnasPorFila; i++) {
+                    const x = 50 + ((posiciones[i] / parametros.largo) * 700);
+                    ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, 200); ctx.stroke();
+                    ctx.fillStyle = '#64748B'; ctx.fillRect(x - 5, 35, 10, 10); ctx.fillRect(x - 5, 195, 10, 10);
+                    if (parametros.incluirColumnasCentrales) ctx.fillRect(x - 5, 115, 10, 10);
+
+                    if (i < numColumnasPorFila - 1) {
+                        ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 1;
+                        const nextX = 50 + ((posiciones[i + 1] / parametros.largo) * 700);
+                        ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(nextX, 20); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(x, 15); ctx.lineTo(x, 25); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(nextX, 15); ctx.lineTo(nextX, 25); ctx.stroke();
+
+                        const mostrarTodo = segmentosCount <= 8;
+                        const esUltimo = i === segmentosCount - 1;
+                        const mostrar = mostrarTodo || esUltimo;
+                        if (mostrar) {
+                            drawDimH(x, nextX, 20, `${round2(segmentos[i])}m`, "#111");
+                        }
+                    }
+                }
+                drawDimH(50, 750, 232, `LARGO TOTAL FRONTAL: ${parametros.largo}m`, "#111");
+                drawDimV(25, 40, 200, `${parametros.caida}m`, "#111");
+
+                drawLabel(120, 245, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
+                drawLabel(120, 260, `Vigas: ${parametros.perfilViga}`, "#0f172a");
+            }, [resultados]);
+            return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
+        };
+
+        const CorreasCanvas = ({ resultados }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                canvas.width = 800; canvas.height = 210;
+                ctx.fillStyle = '#f0f9ff'; ctx.fillRect(0, 0, 800, 250);
+                ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 1; ctx.strokeRect(50, 40, 700, 160);
+
+                const { numCorreasPorAgua, parametros } = resultados;
+                const totalCorreasPlano = parametros.tipoTecho === '2'
+                    ? numCorreasPorAgua * 2
+                    : numCorreasPorAgua;
+                const pasoY = 160 / Math.max(1, totalCorreasPlano - 1);
+
+                const drawLabel = (x, y, text, color = "#0f172a") => {
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, x, y);
+                };
+
+                const drawDimV = (x, y1, y2, text, color = "#1D4ED8") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x - 2, y1 + arrow); ctx.lineTo(x + 2, y1 + arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x, y2); ctx.lineTo(x - 2, y2 - arrow); ctx.lineTo(x + 2, y2 - arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y1); ctx.lineTo(x + ext, y1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y2); ctx.lineTo(x + ext, y2); ctx.stroke();
+                    ctx.font = "bold 9px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, x + 6, (y1 + y2) / 2);
+                };
+
+                const drawDimH = (x1, x2, y, text, color = "#111") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + arrow, y - 2); ctx.lineTo(x1 + arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 - arrow, y - 2); ctx.lineTo(x2 - arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x1, y - ext); ctx.lineTo(x1, y + ext); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y - ext); ctx.lineTo(x2, y + ext); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+                    ctx.fillText(text, (x1 + x2) / 2, y - 4);
+                };
+
+                for (let i = 0; i < totalCorreasPlano; i++) {
+                    const y = 40 + (i * pasoY);
+                    ctx.strokeStyle = '#93C5FD'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(750, y); ctx.stroke();
+                    if (i < totalCorreasPlano - 1 && i < 15 && pasoY > 12) {
+                        ctx.strokeStyle = '#9CA3AF'; ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(35, y); ctx.lineTo(35, y + pasoY); ctx.stroke();
+                        drawDimV(30, y, y + pasoY, `${parametros.sepCorreas}m`, "#1D4ED8");
+                    }
+                }
+                // Divisiones cada 6m de correa y sobrante con cotas
+                const totalLargo = parametros.largo;
+                const maxX = 750;
+                const minX = 50;
+                if (totalLargo > 0) {
+                    const tramo = 6;
+                    const numTramos = Math.floor(totalLargo / tramo);
+                    const tramoUsado = Math.min(tramo, totalLargo);
+                    let lastX = minX;
+
+                    for (let i = 1; i <= numTramos; i++) {
+                        const xCorte = minX + ((i * tramo) / totalLargo) * (maxX - minX);
+                        ctx.strokeStyle = '#64748B'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                        ctx.beginPath(); ctx.moveTo(xCorte, 40); ctx.lineTo(xCorte, 200); ctx.stroke();
+                        ctx.setLineDash([]);
+                        drawDimH(lastX, xCorte, 28, `${round2(tramoUsado)}m`, "#111");
+                        lastX = xCorte;
+                    }
+
+                    const sobrante = round2(totalLargo - (numTramos * tramo));
+                    if (sobrante > 0) {
+                        drawDimH(lastX, maxX, 28, `${sobrante}m`, "#111");
+                    }
+                }
+                if (parametros.tipoTecho === '2') {
+                    const yCumbrera = 40 + (160 / 2);
+                    ctx.fillStyle = '#EF4444'; ctx.globalAlpha = 0.7; ctx.fillRect(50, yCumbrera - 3, 700, 6); ctx.globalAlpha = 1.0;
+                }
+                drawDimH(50, 750, 225, `Ancho cubierto: ${parametros.largo}m`, "#111");
+
+                drawLabel(110, 10, `Correas: ${parametros.perfilCorrea}`, "#0f172a");
+            }, [resultados]);
+            return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
+        };
+
+        const TejasCanvas = ({ resultados }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                canvas.width = 800; canvas.height = 260;
+
+                ctx.fillStyle = '#fffaf0';
+                ctx.fillRect(0, 0, 800, 260);
+                ctx.strokeStyle = '#fed7aa';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(20, 10, 760, 240);
+                ctx.strokeStyle = '#fed7aa';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(50, 30, 700, 200);
+
+                const { parametros } = resultados;
+                const esMetal = parametros.tipoCobertura === "metal";
+                const colorBase = esMetal ? "#CBD5E1" : "#ea580c";
+                const colorBorde = esMetal ? "#94a3b8" : "#7c2d12";
+                const colorGrid = esMetal ? "#cbd5e1" : "#c2410c";
+                const colorTexto = esMetal ? "#334155" : "#7c2d12";
+
+                const drawDimH = (x1, x2, y, text, color = "#9a3412") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + arrow, y - 2); ctx.lineTo(x1 + arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 - arrow, y - 2); ctx.lineTo(x2 - arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x1, y - ext); ctx.lineTo(x1, y + ext); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y - ext); ctx.lineTo(x2, y + ext); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+                    ctx.fillText(text, (x1 + x2) / 2, y - 4);
+                };
+
+                const drawDimV = (x, y1, y2, text, color = "#9a3412") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x - 2, y1 + arrow); ctx.lineTo(x + 2, y1 + arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x, y2); ctx.lineTo(x - 2, y2 - arrow); ctx.lineTo(x + 2, y2 - arrow); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y1); ctx.lineTo(x + ext, y1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x - ext, y2); ctx.lineTo(x + ext, y2); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, x + 6, (y1 + y2) / 2);
+                };
+
+                const drawPlanchaDims = (x, y, h) => {
+                    if (!Array.isArray(parametros.planchasCombo) || parametros.planchasCombo.length === 0) return;
+                    const segmentos = [];
+                    let start = 0;
+                    parametros.planchasCombo.forEach((len, idx) => {
+                        const end = start + len;
+                        segmentos.push([start, end]);
+                        start = end - (idx < parametros.planchasCombo.length - 1 ? parametros.coberturaTraslapeVertical : 0);
+                    });
+
+                    segmentos.forEach(([s, e], idx) => {
+                        const y1 = y + (s / parametros.caida) * h;
+                        const y2 = y + (e / parametros.caida) * h;
+                        drawDimV(x, y1, y2, `${parametros.planchasCombo[idx]}m`, "#9a3412");
+                    });
+                };
+
+                ctx.font = "bold 11px sans-serif"; ctx.fillStyle = colorGrid; ctx.textAlign = "left";
+                ctx.fillText("MODULACION EN PLANTA (PLANCHAS)", 60, 20);
+                ctx.fillText(esMetal ? "CORTE Y DETALLE DE LA ONDA (METAL)" : "CORTE Y DETALLE DE LA ONDA (ESPANOLA)", 420, 20);
+
+                ctx.font = "bold 10px sans-serif"; ctx.fillStyle = colorTexto; ctx.textAlign = "left";
+                ctx.fillText(`${parametros.coberturaNombre}: ancho util ${parametros.coberturaAnchoUtil}m`, 60, 36);
+
+                ctx.strokeStyle = "#fed7aa"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(390, 10); ctx.lineTo(390, 240); ctx.stroke();
+
+                const pX = 60; const pY = 45; const pW = 300; const pH = 160;
+
+                const drawPlanta = (x, y, w, h, label) => {
+                    ctx.fillStyle = colorBase; ctx.globalAlpha = esMetal ? 0.5 : 0.6;
+                    ctx.fillRect(x, y, w, h);
+                    ctx.globalAlpha = 1.0;
+
+                    const numPlanchasAncho = Math.ceil(parametros.largo / 0.95);
+                    const colW = w / (parametros.largo / 0.95);
+                    ctx.strokeStyle = colorBorde; ctx.lineWidth = 1.5;
+                    for(let i=0; i<=numPlanchasAncho; i++) {
+                        let colX = x + (i * colW);
+                        if(colX > x + w) colX = x + w;
+                        ctx.beginPath(); ctx.moveTo(colX, y); ctx.lineTo(colX, y + h); ctx.stroke();
+                    }
+
+                    const numEscalones = Math.ceil(parametros.caida / 0.20);
+                    const stepH = h / (parametros.caida / 0.20);
+                    ctx.strokeStyle = colorGrid; ctx.lineWidth = 0.5;
+                    for(let i=0; i<=numEscalones; i++) {
+                        let rowY = y + (i * stepH);
+                        if(rowY > y + h) rowY = y + h;
+                        ctx.beginPath(); ctx.moveTo(x, rowY); ctx.lineTo(x + w, rowY); ctx.stroke();
+                    }
+
+                    if (label) {
+                        ctx.font = "bold 9px sans-serif"; ctx.fillStyle = colorTexto; ctx.textAlign = "left";
+                        ctx.fillText(label, x + 6, y + 12);
+                    }
+                };
+
+                if (parametros.tipoTecho === '2') {
+                    const halfH = pH / 2;
+                    drawPlanta(pX, pY, pW, halfH, "Agua A");
+                    drawPlanta(pX, pY + halfH, pW, halfH, "Agua B");
+                    ctx.strokeStyle = "#dc2626"; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(pX, pY + halfH); ctx.lineTo(pX + pW, pY + halfH); ctx.stroke();
+                    ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#dc2626"; ctx.textAlign = "left";
+                    ctx.fillText("Cumbrera", pX + 6, pY + halfH - 4);
+                    drawPlanchaDims(pX + pW + 10, pY, halfH);
+                    drawPlanchaDims(pX + pW + 10, pY + halfH, halfH);
+                } else {
+                    drawPlanta(pX, pY, pW, pH, "");
+                    drawPlanchaDims(pX + pW + 10, pY, pH);
+                }
+
+                if (Array.isArray(parametros.cortesPlanchas) && parametros.cortesPlanchas.length > 0) {
+                    ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+                    parametros.cortesPlanchas.forEach((corte) => {
+                        const y = pY + (corte / parametros.caida) * pH;
+                        ctx.beginPath(); ctx.moveTo(pX, y); ctx.lineTo(pX + pW, y); ctx.stroke();
+                        ctx.setLineDash([]);
+                        ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#1d4ed8"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+                        ctx.fillText("Union de plancha", pX + 6, y - 2);
+                        ctx.setLineDash([6, 4]);
+                    });
+                    ctx.setLineDash([]);
+                }
+
+                drawDimH(pX, pX + pW, pY + pH + 18, `Ancho total: ${parametros.largo}m`, colorTexto);
+                if (parametros.tipoTecho === '2') {
+                    drawDimV(pX - 20, pY, pY + (pH / 2), `${parametros.caida}m`, colorTexto);
+                    drawDimV(pX - 20, pY + (pH / 2), pY + pH, `${parametros.caida}m`, colorTexto);
+                } else {
+                    drawDimV(pX - 20, pY, pY + pH, `${parametros.caida}m`, colorTexto);
+                }
+
+                const dX = 420; const dY = 110;
+                const dW = 300;
+
+                ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#431407"; ctx.textAlign="left";
+                ctx.fillText(esMetal ? "CORTE TRANSVERSAL (6 Ondas)" : "CORTE TRANSVERSAL (7 Ondas Altas, 6 Concavas)", dX, 45);
+
+                const drawMetalWave = (startX, startY, width, highOffset, lowOffset, waveCount) => {
+                    const totalSegs = waveCount * 2;
+                    const segW = width / totalSegs;
+                    ctx.moveTo(startX, startY);
+                    for (let i = 0; i < totalSegs; i++) {
+                        const segStart = startX + (i * segW);
+                        const segEnd = segStart + segW;
+                        const isHigh = (i % 2 === 0);
+                        const topY = isHigh ? (startY - highOffset) : (startY + lowOffset);
+                        ctx.lineTo(segStart + (segW * 0.15), startY);
+                        ctx.lineTo(segStart + (segW * 0.2), topY);
+                        ctx.lineTo(segStart + (segW * 0.8), topY);
+                        ctx.lineTo(segStart + (segW * 0.85), startY);
+                        ctx.lineTo(segEnd, startY);
+                    }
+                };
+
+                ctx.strokeStyle = "#ea580c"; ctx.lineWidth = 3;
+                ctx.beginPath();
+                if (esMetal) {
+                    drawMetalWave(dX, dY, dW, 16, 6, 6);
+                } else {
+                    const segW = dW / 13;
+                    ctx.moveTo(dX, dY);
+                    for(let i=0; i<13; i++) {
+                        let isHigh = (i % 2 === 0);
+                        let startX = dX + (i * segW);
+                        let endX = startX + segW;
+                        let cpX = startX + (segW/2);
+                        let cpY = isHigh ? dY - 25 : dY + 5;
+                        ctx.quadraticCurveTo(cpX, cpY, endX, dY);
+                    }
+                }
+                ctx.stroke();
+
+                ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                if (esMetal) {
+                    const segs = 12;
+                    const segWMetal = dW / segs;
+                    const overlayStart = dX + (10 * segWMetal);
+                    drawMetalWave(overlayStart, dY - 5, dW - (overlayStart - dX), 14, 5, 2);
+                } else {
+                    const segW = dW / 13;
+                    ctx.moveTo(dX + (11 * segW), dY - 5);
+                    for(let i=11; i<14; i++) {
+                        let isHigh = (i % 2 === 0);
+                        let startX = dX + (i * segW) - 2;
+                        let endX = startX + segW;
+                        let cpX = startX + (segW/2);
+                        let cpY = isHigh ? (dY - 5) - 25 : (dY - 5) + 5;
+                        ctx.quadraticCurveTo(cpX, cpY, endX, dY - 5);
+                    }
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(dX, dY + 20); ctx.lineTo(dX + dW, dY + 20); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(dX, dY + 15); ctx.lineTo(dX, dY + 25); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(dX + dW, dY + 15); ctx.lineTo(dX + dW, dY + 25); ctx.stroke();
+                drawDimH(dX, dX + dW, dY + 20, `Ancho de la Plancha: ${parametros.coberturaAnchoPlancha}m`, "#334155");
+
+                const segWBase = esMetal ? (dW / 12) : (dW / 13);
+                const traslapeX = dX + ((esMetal ? 10 : 11) * segWBase);
+                const topCotaY = dY - 35;
+                ctx.beginPath(); ctx.moveTo(traslapeX, topCotaY); ctx.lineTo(dX + dW, topCotaY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(traslapeX, topCotaY + 5); ctx.lineTo(traslapeX, topCotaY - 5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(dX + dW, topCotaY + 5); ctx.lineTo(dX + dW, topCotaY - 5); ctx.stroke();
+                drawDimH(traslapeX, dX + dW, topCotaY, `Traslape: ${parametros.coberturaTraslapeOndas}m`, "#1d4ed8");
+
+                ctx.beginPath(); ctx.moveTo(dX, topCotaY); ctx.lineTo(traslapeX, topCotaY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(dX, topCotaY + 5); ctx.lineTo(dX, topCotaY - 5); ctx.stroke();
+                drawDimH(dX, traslapeX, topCotaY, `Ancho Util: ${parametros.coberturaAnchoUtil}m`, "#166534");
+
+                const lY = 190;
+                ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#431407"; ctx.textAlign="left";
+                ctx.fillText("CORTE LONGITUDINAL (Paso Escalon a 20cm)", dX, 150);
+
+                ctx.strokeStyle = "#ea580c"; ctx.lineWidth = 3;
+                ctx.beginPath();
+                let stepX = dX;
+                ctx.moveTo(stepX, lY);
+                for(let i=0; i<4; i++) {
+                    ctx.lineTo(stepX + 50, lY + (i*10));
+                    ctx.lineTo(stepX + 50, lY + (i*10) + 12);
+                    stepX += 50;
+                }
+                ctx.stroke();
+
+                ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(dX, lY + 25); ctx.lineTo(dX + 50, lY + 35); ctx.stroke();
+                drawDimH(dX, dX + 50, lY + 45, "Long. Onda: ~20cm", "#334155");
+
+            }, [resultados]);
+            return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
+        };
+
+        const CanalesCanvas = ({ resultados }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                canvas.width = 800; canvas.height = 130;
+                ctx.clearRect(0, 0, 800, 130);
+                const { parametros } = resultados;
+
+                const drawDimH = (x1, x2, y, text, color = "#111") => {
+                    const arrow = 4;
+                    const ext = 6;
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + arrow, y - 2); ctx.lineTo(x1 + arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 - arrow, y - 2); ctx.lineTo(x2 - arrow, y + 2); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(x1, y - ext); ctx.lineTo(x1, y + ext); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y - ext); ctx.lineTo(x2, y + ext); ctx.stroke();
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+                    ctx.fillText(text, (x1 + x2) / 2, y - 4);
+                };
+
+                const drawCanal = (y) => {
+                    ctx.fillStyle = '#93C5FD'; ctx.strokeStyle = '#3B82F6'; ctx.lineWidth = 1;
+                    ctx.fillRect(100, y, 600, 16); ctx.strokeRect(100, y, 600, 16);
+
+                    ctx.fillStyle = '#1E3A8A'; ctx.fillRect(96, y - 3, 4, 22); ctx.fillRect(700, y - 3, 4, 22);
+
+                    ctx.font = "bold 10px sans-serif"; ctx.fillStyle = "#1E3A8A";
+                    ctx.textAlign = "end"; ctx.fillText("Tapa Izq.", 90, y + 10);
+                    ctx.textAlign = "start"; ctx.fillText("Tapa Der.", 712, y + 10);
+
+                    ctx.fillStyle = '#BFDBFE'; ctx.strokeStyle = '#3B82F6';
+                    ctx.fillRect(665, y + 16, 18, 25); ctx.strokeRect(665, y + 16, 18, 25);
+
+                    ctx.fillStyle = '#2563EB';
+                    ctx.beginPath(); ctx.moveTo(674, y + 41); ctx.lineTo(670, y + 49); ctx.lineTo(678, y + 49); ctx.fill();
+
+                    ctx.fillStyle = '#F59E0B';
+                    for (let i = 0; i < 7; i++) {
+                        ctx.beginPath(); ctx.arc(100 + (i * 100), y + 8, 3.5, 0, 2 * Math.PI); ctx.fill();
+                    }
+                };
+
+                if (parametros.tipoTecho === '2') {
+                    drawCanal(30);
+                    drawCanal(70);
+                    ctx.font = "10px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#111";
+                    ctx.fillText("Canal Alero Lado A", 400, 22);
+                    ctx.fillText("Canal Alero Lado B", 400, 62);
+                    drawDimH(100, 700, 112, `Longitud Desarrollo Canal (cada lado): ${parametros.largo}m`, "#111");
+                } else {
+                    drawCanal(50);
+                    ctx.font = "10px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#111";
+                    ctx.fillText("Ganchos de soporte cada ~2m", 400, 32);
+                    drawDimH(100, 700, 95, `Longitud Desarrollo Canal: ${parametros.largo}m`, "#111");
+                }
+            }, [resultados]);
+            return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
+        };
+
+        // --- APLICACION PRINCIPAL ---
+        function App() {
+            const [params, setParams] = useState({
+                largo: "13",
+                caida: "7",
+                volado: "0",
+                hBaja: "2.4",
+                hAlta: "3.4",
+                pendientePercent: "15",
+                usarPendienteAuto: true,
+                sepColumnasLargo: "3.5",
+                sepColumnasCaida: "4",
+                sepCorreas: "0.8",
+                tipoTecho: "1",
+                tipoCobertura: "teja",
+                dividirColumnasLargo: false,
+                dividirColumnasCaida: false,
+                incluirColumnasCentrales1Agua: false,
+                numColumnasCaida: "3",
+                numColumnasLargo: "",
+                pitonesCustom: "",
+                ganchosCustom: "",
+                incluirColumnasCentrales: true,
+                incluirCanales: true,
+                incluirVigaUnion: false,
+                perfilVigaUnion: "Tubo 80x40 en 2mm",
+                perfilColumna: "Tubo 100x100 en 2mm",
+                perfilViga: "Tubo Rectangular 100x50 en 2mm",
+                perfilCorrea: "Correa Tipo G 80x40 en 2mm"
+            });
+            const [activePlanConfig, setActivePlanConfig] = useState(null);
+            const [floatingPos, setFloatingPos] = useState(null);
+            const [isDragging, setIsDragging] = useState(false);
+            const dragOffsetRef = useRef({ x: 0, y: 0 });
+            const dragTimerRef = useRef(null);
+            const didDragRef = useRef(false);
+            const [aceptarReajusteCorreas, setAceptarReajusteCorreas] = useState(false);
+
+            const previewCaidaRaw = Math.max(0, Number(params.caida) || 0);
+            const previewCaida = params.tipoTecho === '2' ? previewCaidaRaw / 2 : previewCaidaRaw;
+            const previewHBaja = Math.max(0, Number(params.hBaja) || 0);
+            const previewPendiente = Math.max(0, Number(params.pendientePercent) || 0);
+            const previewHAltaAuto = previewHBaja + (previewCaida * previewPendiente / 100);
+
+            const [resultados, setResultados] = useState(null);
+            const reportRef = useRef(null);
+
+            useEffect(() => {
+                const updatePreviewScale = () => {
+                    const reportEl = reportRef.current;
+                    if (!reportEl) return;
+                    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+                    const padding = 24;
+                    const baseWidth = 800;
+                    const scale = isMobile ? Math.min(1, (window.innerWidth - padding) / baseWidth) : 1;
+                    reportEl.style.transformOrigin = "top center";
+                    reportEl.style.transform = `scale(${scale})`;
+                };
+
+                updatePreviewScale();
+                window.addEventListener("resize", updatePreviewScale);
+                return () => window.removeEventListener("resize", updatePreviewScale);
+            }, [resultados]);
+
+            const permiteColumnasCentrales = Number(params.largo) > 10;
+            const columnasCentralesActivas = params.tipoTecho === '2' && permiteColumnasCentrales && params.incluirColumnasCentrales;
+            const requiereParTensorUI = params.tipoTecho === '2' && !columnasCentralesActivas;
+
+            useEffect(() => {
+                if (requiereParTensorUI && params.perfilViga !== "Tubo 75x75 en 2mm (par + tensor)") {
+                    setParams(prev => ({
+                        ...prev,
+                        perfilViga: "Tubo 75x75 en 2mm (par + tensor)"
+                    }));
+                }
+            }, [requiereParTensorUI, params.perfilViga]);
+
+            const handleChange = (e) => {
+                const { name, value, type, checked } = e.target;
+                setParams(prev => ({
+                    ...prev,
+                    [name]: type === 'checkbox' ? checked : value
+                }));
+            };
+
+            const togglePlanConfig = (key) => {
+                setActivePlanConfig(prev => (prev === key ? null : key));
+            };
+
+            const handleFloatingPointerDown = (e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                if (e.currentTarget.setPointerCapture) {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                }
+                dragOffsetRef.current = {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
+                didDragRef.current = false;
+                if (dragTimerRef.current) {
+                    clearTimeout(dragTimerRef.current);
+                }
+                dragTimerRef.current = setTimeout(() => {
+                    setIsDragging(true);
+                }, 1000);
+            };
+
+            const handleFloatingClick = () => {
+                if (didDragRef.current) {
+                    didDragRef.current = false;
+                    return;
+                }
+                calcular();
+            };
+
+            const handleReajustarCorreas = () => {
+                const sugerida = resultados?.parametros?.sepCorreasSugerida;
+                if (!sugerida || !aceptarReajusteCorreas) return;
+                setParams(prev => ({
+                    ...prev,
+                    sepCorreas: String(sugerida)
+                }));
+                setAceptarReajusteCorreas(false);
+                setTimeout(() => calcular(), 50);
+            };
+
+            useEffect(() => {
+                if (floatingPos) return;
+                const size = 56;
+                setFloatingPos({
+                    x: Math.max(0, (window.innerWidth / 2) - (size / 2)),
+                    y: Math.max(0, (window.innerHeight / 2) - (size / 2))
+                });
+            }, [floatingPos]);
+
+            useEffect(() => {
+                if (!isDragging) return;
+                const handleMove = (e) => {
+                    const size = 56;
+                    const maxX = Math.max(0, window.innerWidth - size);
+                    const maxY = Math.max(0, window.innerHeight - size);
+                    didDragRef.current = true;
+                    setFloatingPos({
+                        x: Math.min(maxX, Math.max(0, e.clientX - dragOffsetRef.current.x)),
+                        y: Math.min(maxY, Math.max(0, e.clientY - dragOffsetRef.current.y))
+                    });
+                };
+                const handleUp = () => {
+                    setIsDragging(false);
+                    if (dragTimerRef.current) {
+                        clearTimeout(dragTimerRef.current);
+                        dragTimerRef.current = null;
+                    }
+                };
+                window.addEventListener('pointermove', handleMove);
+                window.addEventListener('pointerup', handleUp);
+                window.addEventListener('pointercancel', handleUp);
+                return () => {
+                    window.removeEventListener('pointermove', handleMove);
+                    window.removeEventListener('pointerup', handleUp);
+                    window.removeEventListener('pointercancel', handleUp);
+                };
+            }, [isDragging]);
+
+            const calcular = () => {
+                try {
+                    const vLargo = Math.max(0.1, Number(params.largo) || 0.1);
+                    const vCaida = Math.max(0, Number(params.caida) || 0);
+                    const vVolado = Math.max(0, Number(params.volado) || 0);
+                    const vHBaja = Math.max(0, Number(params.hBaja) || 0);
+                    const vPendiente = Math.max(0, Number(params.pendientePercent) || 0);
+                    let vHAlta = Math.max(0.1, Number(params.hAlta) || 0.1);
+                    const vSepColumnasLargo = Math.max(0.1, Number(params.sepColumnasLargo) || 3.5);
+                    const vSepColumnasCaida = Math.max(0.1, Number(params.sepColumnasCaida) || 0.1);
+                    const vSepCorreas = Math.max(0.1, Number(params.sepCorreas) || 0.8);
+
+                    const dosAguas = params.tipoTecho === '2';
+                    const incluirColumnasCentrales = dosAguas
+                        ? (params.incluirColumnasCentrales && vLargo > 10)
+                        : params.incluirColumnasCentrales1Agua;
+                    const requiereParTensor = dosAguas && !incluirColumnasCentrales;
+
+                    const vCaidaPorLado = dosAguas ? vCaida / 2 : vCaida;
+                    if (params.usarPendienteAuto) {
+                        vHAlta = Math.max(vHBaja, vHBaja + (vCaidaPorLado * vPendiente / 100));
+                    }
+
+                    const pendienteLineal = vCaidaPorLado > 0 ? (vHAlta - vHBaja) / vCaidaPorLado : 0;
+                    const numColumnasCaidaInput = Math.max(2, Math.floor(Number(params.numColumnasCaida) || 2));
+                    let posicionesCaida = [];
+                    if (!dosAguas) {
+                        const filas = incluirColumnasCentrales ? numColumnasCaidaInput : 2;
+                        const tramos = Math.max(1, filas - 1);
+                        let paso = params.dividirColumnasCaida
+                            ? (vCaidaPorLado / tramos)
+                            : vSepColumnasCaida;
+                        if (paso * tramos > vCaidaPorLado) {
+                            paso = vCaidaPorLado / tramos;
+                        }
+                        posicionesCaida = Array.from({ length: filas }, (_, i) => round2(i * paso));
+                        posicionesCaida[0] = 0;
+                        posicionesCaida[filas - 1] = round2(vCaidaPorLado);
+                    } else {
+                        posicionesCaida = [0, round2(vCaidaPorLado)];
+                    }
+                    const alturasCaida = posicionesCaida.map((pos) => round2(vHBaja + (pos * pendienteLineal)));
+
+                    const longitudInclinada = vCaidaPorLado;
+                    const longitudTotalCaida = longitudInclinada + vVolado;
+
+                    const esMetal = params.tipoCobertura === "metal";
+                    const planchasDisponibles = esMetal ? METALES_DISPONIBLES : TEJAS_DISPONIBLES;
+                    const traslapeVertical = esMetal ? TRASLAPE_VERTICAL_METAL : TRASLAPE_VERTICAL_TEJA;
+                    const anchoUtil = esMetal ? ANCHO_UTIL_METAL : ANCHO_UTIL_TEJA;
+                    const anchoPlancha = esMetal ? ANCHO_PLANCHA_METAL : ANCHO_PLANCHA_TEJA;
+                    const traslapeOndas = esMetal ? TRASLAPE_ONDAS_METAL : TRASLAPE_ONDAS_TEJA;
+                    const coberturaNombre = esMetal ? "Duratecho 6 ondas" : "Teja Espanola";
+                    const tornillosLabel = esMetal
+                        ? "Tornillos autoperforantes 2 1/2 (sin capuchon)"
+                        : "Tornillos + Capuchones";
+
+                    const anchoTejas = Math.ceil(vLargo / anchoUtil);
+                    const comboTejas = optimizarPlanchas(longitudTotalCaida, planchasDisponibles, traslapeVertical);
+                    let desgloseTejas = {};
+                    comboTejas.forEach(t => { desgloseTejas[t] = (desgloseTejas[t] || 0) + anchoTejas; });
+                    if (dosAguas) { for (let key in desgloseTejas) desgloseTejas[key] *= 2; }
+
+                    const cortesPlanchas = [];
+                    if (comboTejas.length > 1) {
+                        let acumulado = 0;
+                        for (let i = 0; i < comboTejas.length - 1; i++) {
+                            acumulado += comboTejas[i];
+                            const posicion = Math.max(0, acumulado - traslapeVertical * (i + 1));
+                            cortesPlanchas.push(posicion);
+                        }
+                    }
+
+                    const cortesValidos = cortesPlanchas.filter((c) => c > 0.05);
+                    const correaTol = 0.05;
+                    const cortesAlineados = cortesValidos.length === 0
+                        ? true
+                        : cortesValidos.every((c) => Math.abs((c / vSepCorreas) - Math.round(c / vSepCorreas)) <= correaTol);
+                    let sepCorreasSugerida = vSepCorreas;
+                    if (!cortesAlineados && cortesValidos.length > 0) {
+                        const minS = Math.max(0.2, vSepCorreas - 0.3);
+                        const maxS = vSepCorreas + 0.3;
+                        let mejor = null;
+                        for (let s = minS; s <= maxS + 1e-6; s += 0.05) {
+                            const ok = cortesValidos.every((c) => Math.abs((c / s) - Math.round(c / s)) <= correaTol);
+                            if (ok) {
+                                mejor = s;
+                                break;
+                            }
+                        }
+                        if (!mejor) {
+                            const candidatos = cortesValidos.map((c) => {
+                                const n = Math.max(1, Math.round(c / vSepCorreas));
+                                return c / n;
+                            });
+                            const promedio = candidatos.reduce((acc, v) => acc + v, 0) / candidatos.length;
+                            mejor = Math.max(0.2, promedio);
+                        }
+                        sepCorreasSugerida = round2(mejor);
+                    }
+
+                    const totalPlanchas = Object.values(desgloseTejas).reduce((a, b) => a + b, 0);
+
+                    let cumbreros = dosAguas ? Math.ceil(vLargo / anchoUtil) : 0;
+                    let tornillosExtraCumbreros = cumbreros * 4;
+                    const totalTornillos = (totalPlanchas * 9) + tornillosExtraCumbreros;
+
+                    const numFilasColumnasProfundidad = dosAguas
+                        ? (incluirColumnasCentrales ? 3 : 2)
+                        : (incluirColumnasCentrales ? numColumnasCaidaInput : 2);
+                    const numColumnasLargoInput = Math.max(0, Math.floor(Number(params.numColumnasLargo) || 0));
+                    const numColumnasPorFila = numColumnasLargoInput > 1
+                        ? numColumnasLargoInput
+                        : (Math.ceil(vLargo / vSepColumnasLargo) + 1);
+                    const totalColumnasNum = numColumnasPorFila * numFilasColumnasProfundidad;
+                    const sepColumnasUsada = numColumnasPorFila > 1
+                        ? round2(vLargo / (numColumnasPorFila - 1))
+                        : vSepColumnasLargo;
+
+                    let metrosLinealesColumnas = dosAguas
+                        ? (numColumnasPorFila * vHBaja * 2) + (incluirColumnasCentrales ? (numColumnasPorFila * vHAlta) : 0)
+                        : (numColumnasPorFila * alturasCaida.reduce((acc, h) => acc + h, 0));
+
+                    const perfilVigaFinal = requiereParTensor
+                        ? "Tubo 75x75 en 2mm (par + tensor)"
+                        : params.perfilViga;
+                    const usarParTensor = requiereParTensor || (perfilVigaFinal || "").includes("75x75");
+                    const longitudViga = longitudTotalCaida;
+                    let metrosLinealesVigas = longitudViga * numColumnasPorFila;
+                    if (dosAguas) metrosLinealesVigas *= 2;
+                    let tensorLongitud = 0;
+                    if (usarParTensor) {
+                        tensorLongitud = 1.5;
+                        metrosLinealesVigas = ((longitudViga * 2) + tensorLongitud) * numColumnasPorFila;
+                    }
+
+                    const numCorreasPorAgua = Math.ceil(longitudTotalCaida / vSepCorreas) + 1;
+                    let metrosLinealesCorreas = numCorreasPorAgua * vLargo;
+                    if (dosAguas) metrosLinealesCorreas *= 2;
+
+                    const metrosLinealesVigaUnion = params.incluirVigaUnion
+                        ? vLargo * numFilasColumnasProfundidad
+                        : 0;
+                    const tubosVigaUnion = params.incluirVigaUnion
+                        ? calcularTubos6m(metrosLinealesVigaUnion)
+                        : 0;
+
+                    const kerf = 0.0;
+                    const piezasColumnas = [];
+                    if (dosAguas) {
+                        for (let i = 0; i < numColumnasPorFila * 2; i++) piezasColumnas.push(vHBaja);
+                        if (incluirColumnasCentrales) {
+                            for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHAlta);
+                        }
+                    } else {
+                        alturasCaida.forEach((altura) => {
+                            for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(altura);
+                        });
+                    }
+
+                    const piezasVigas = [];
+                    if (usarParTensor) {
+                        for (let i = 0; i < numColumnasPorFila * 2; i++) piezasVigas.push(longitudViga);
+                        for (let i = 0; i < numColumnasPorFila; i++) piezasVigas.push(tensorLongitud);
+                    } else {
+                        const totalVigas = dosAguas ? numColumnasPorFila * 2 : numColumnasPorFila;
+                        for (let i = 0; i < totalVigas; i++) piezasVigas.push(longitudViga);
+                    }
+
+                    const piezasCorreas = [];
+                    const totalCorreas = dosAguas ? numCorreasPorAgua * 2 : numCorreasPorAgua;
+                    for (let i = 0; i < totalCorreas; i++) piezasCorreas.push(vLargo);
+
+                    const piezasVigaUnion = [];
+                    if (params.incluirVigaUnion) {
+                        for (let i = 0; i < numFilasColumnasProfundidad; i++) piezasVigaUnion.push(vLargo);
+                    }
+
+                    const cortesDetalle = [
+                        {
+                            titulo: "Columnas",
+                            perfil: params.perfilColumna,
+                            piezas: piezasColumnas
+                        },
+                        {
+                            titulo: "Vigas principales",
+                            perfil: perfilVigaFinal,
+                            piezas: piezasVigas
+                        },
+                        params.incluirVigaUnion ? {
+                            titulo: "Viga de union",
+                            perfil: params.perfilVigaUnion,
+                            piezas: piezasVigaUnion
+                        } : null,
+                        {
+                            titulo: "Correas",
+                            perfil: params.perfilCorrea,
+                            piezas: piezasCorreas
+                        }
+                    ].filter(Boolean).map((item) => {
+                        const plan = planCortesPerfil(item.piezas, kerf, 6);
+                        let recoveryUnit = 6;
+                        if (item.titulo === "Columnas") {
+                            recoveryUnit = Math.min(...item.piezas);
+                        }
+                        const reusableSobrante = round2(
+                            plan.detalleTubos
+                                .filter((t) => t.sobrante >= 1)
+                                .reduce((acc, t) => acc + t.sobrante, 0)
+                        );
+                        const stockRecuperables = Math.floor(reusableSobrante / recoveryUnit);
+                        const sobranteRestante = round2(reusableSobrante - (stockRecuperables * recoveryUnit));
+                        return {
+                            ...item,
+                            recoveryUnit,
+                            totalPiezas: item.piezas.length,
+                            resumen: resumenPiezas(item.piezas),
+                            plan,
+                            stockRecuperables,
+                            sobranteRestante
+                        };
+                    });
+
+                    const planColumnas = cortesDetalle.find((item) => item.titulo === "Columnas");
+                    const planVigas = cortesDetalle.find((item) => item.titulo === "Vigas principales");
+                    const planCorreas = cortesDetalle.find((item) => item.titulo === "Correas");
+                    const planVigaUnion = cortesDetalle.find((item) => item.titulo === "Viga de union");
+
+                    const tubosColumnas = planColumnas ? planColumnas.plan.totalTubos : 0;
+                    const tubosVigas = planVigas ? planVigas.plan.totalTubos : 0;
+                    const tubosCorreas = planCorreas ? planCorreas.plan.totalTubos : 0;
+                    const tubosVigaUnionPlan = planVigaUnion ? planVigaUnion.plan.totalTubos : tubosVigaUnion;
+                    const tubosColumnasConSobrantes = planColumnas
+                        ? Math.max(0, planColumnas.plan.totalTubos - planColumnas.stockRecuperables)
+                        : tubosColumnas;
+                    const tubosCorreasConSobrantes = planCorreas
+                        ? Math.max(0, planCorreas.plan.totalTubos - planCorreas.stockRecuperables)
+                        : tubosCorreas;
+
+                    let canalesDetalle = null;
+                    if (params.incluirCanales) {
+                        const longitudCanalesA_Cubrir = dosAguas ? vLargo * 2 : vLargo;
+                        const piezas = calcularCanales(vLargo);
+                        const vPitonesCustom = Math.max(0, Math.floor(Number(params.pitonesCustom) || 0));
+                        const vGanchosCustom = Math.max(0, Math.floor(Number(params.ganchosCustom) || 0));
+                        if(dosAguas){ piezas.c6 *= 2; piezas.c5 *= 2; piezas.c4 *= 2; piezas.c3 *= 2; }
+                        canalesDetalle = {
+                            ...piezas,
+                            tapas: dosAguas ? 4 : 2,
+                            pitones: vPitonesCustom > 0 ? vPitonesCustom : (dosAguas ? 2 : 1),
+                            ganchos: vGanchosCustom > 0 ? vGanchosCustom : (Math.ceil(longitudCanalesA_Cubrir / 2) + (dosAguas ? 2 : 1))
+                        };
+                    }
+
+                    const recomendaciones = [];
+                    if (dosAguas && vLargo > 10 && !incluirColumnasCentrales) {
+                        recomendaciones.push("Se recomienda colocar columnas centrales en cumbrera por largo mayor a 10m. Puede activarlas si aplica.");
+                    }
+                    if (requiereParTensor) {
+                        recomendaciones.push("Al no usar columnas centrales en 2 aguas, se aplica sistema par + tensor en 75x75.");
+                    }
+                    if (!cortesAlineados) {
+                        recomendaciones.push("Advertencia: hay traslapes en largo que no coinciden con una correa. Se recomienda reajustar la separacion de correas.");
+                    }
+
+                    setResultados({
+                        desgloseTejas, totalTornillos, tubosColumnas, tubosVigas, tubosCorreas,
+                        totalColumnasNum, numCorreasPorAgua, cumbreros, canalesDetalle, numColumnasPorFila,
+                        tubosVigaUnion: tubosVigaUnionPlan,
+                        tubosColumnasConSobrantes,
+                        tubosCorreasConSobrantes,
+                        longitudInclinada: longitudTotalCaida,
+                        recomendaciones,
+                        cortesDetalle,
+                        kerfCorte: kerf,
+                        parametros: {
+                            largo: vLargo, caida: vCaidaPorLado, volado: vVolado, hBaja: vHBaja, hAlta: vHAlta,
+                            sepColumnasLargo: vSepColumnasLargo,
+                            sepColumnasCaida: vSepColumnasCaida,
+                            sepCorreas: vSepCorreas,
+                            tipoTecho: params.tipoTecho, incluirCanales: params.incluirCanales,
+                            incluirColumnasCentrales,
+                            posicionesCaida,
+                            alturasCaida,
+                            numColumnasCaida: numColumnasCaidaInput,
+                            numColumnasLargo: numColumnasLargoInput,
+                            dividirColumnasLargo: params.dividirColumnasLargo,
+                            dividirColumnasCaida: params.dividirColumnasCaida,
+                            sepColumnasUsada,
+                            pendientePercent: vPendiente, usarPendienteAuto: params.usarPendienteAuto,
+                            incluirVigaUnion: params.incluirVigaUnion, perfilVigaUnion: params.perfilVigaUnion,
+                            perfilColumna: params.perfilColumna, perfilViga: perfilVigaFinal, perfilCorrea: params.perfilCorrea,
+                            tensorLongitud,
+                            tipoCobertura: params.tipoCobertura,
+                            coberturaNombre,
+                            coberturaAnchoPlancha: anchoPlancha,
+                            coberturaAnchoUtil: anchoUtil,
+                            coberturaTraslapeOndas: traslapeOndas,
+                            coberturaTraslapeVertical: traslapeVertical,
+                            cortesPlanchas,
+                            planchasCombo: comboTejas,
+                            tornillosLabel,
+                            cortesAlineados,
+                            sepCorreasSugerida
+                        }
+                    });
+
+                    setTimeout(() => {
+                        document.getElementById('panel-resultados')?.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+
+                } catch (error) {
+                    alert("Verifique las dimensiones introducidas.");
+                }
+            };
+
+            const descargarPDF = async () => {
+                const element = reportRef.current;
+                const isMobile = window.matchMedia("(max-width: 768px)").matches;
+                const pixelRatio = Math.min(2, window.devicePixelRatio || 2);
+                const renderDelay = isMobile ? 300 : 150;
+
+                // === SOLUCION DEFINITIVA DE CAPTURA EN MOVILES ===
+                // 1. Buscamos los contenedores que podrian tener desplazamiento.
+                const scrollContainer = document.getElementById('panel-resultados');
+                const scrollXContainer = element.parentElement;
+
+                // 2. Guardamos la posicion original donde el usuario estaba leyendo.
+                const originalScrollY = scrollContainer ? scrollContainer.scrollTop : 0;
+                const originalScrollX = scrollXContainer ? scrollXContainer.scrollLeft : 0;
+                const originalWindowY = window.scrollY;
+                const originalJustify = scrollXContainer ? scrollXContainer.style.justifyContent : "";
+                const originalAlign = scrollXContainer ? scrollXContainer.style.alignItems : "";
+
+                // 3. Forzamos todas las barras de desplazamiento estrictamente al tope y a la izquierda (0,0).
+                // Esto garantiza que la camara (html2canvas) tome el borde izquierdo real del reporte.
+                if (scrollContainer) scrollContainer.scrollTop = 0;
+                if (scrollXContainer) {
+                    scrollXContainer.scrollLeft = 0;
+                    scrollXContainer.style.justifyContent = "flex-start";
+                    scrollXContainer.style.alignItems = "flex-start";
+                }
+                window.scrollTo(0, 0);
+
+                // 4. Pausa para permitir al celular redibujar la pantalla en la coordenada 0,0.
+                await new Promise(resolve => setTimeout(resolve, renderDelay));
+
+                const reportEl = document.getElementById('reporte-pdf');
+                let prevTransform = "";
+                let prevWidth = "";
+                let prevHeight = "";
+                let prevOverflow = "";
+                let prevMarginLeft = "";
+                let prevMarginRight = "";
+                let prevPosition = "";
+                let prevLeft = "";
+                if (reportEl) {
+                    prevTransform = reportEl.style.transform || "";
+                    prevWidth = reportEl.style.width || "";
+                    prevHeight = reportEl.style.height || "";
+                    prevOverflow = reportEl.style.overflow || "";
+                    prevMarginLeft = reportEl.style.marginLeft || "";
+                    prevMarginRight = reportEl.style.marginRight || "";
+                    prevPosition = reportEl.style.position || "";
+                    prevLeft = reportEl.style.left || "";
+                    reportEl.classList.add('pdf-exporting');
+                    reportEl.style.transform = "none";
+                    reportEl.style.width = "800px";
+                    reportEl.style.height = "auto";
+                    reportEl.style.overflow = "visible";
+                    reportEl.style.marginLeft = "-6px";
+                    reportEl.style.marginRight = "auto";
+                    reportEl.style.position = "relative";
+                    reportEl.style.left = "0";
+                }
+
+                const opt = {
+                    margin:       isMobile ? [6, 0, 6, 0] : [10, 0, 10, 0],
+                    filename:     'Cotizacion_Canvas_UP_CONS.pdf',
+                    image:        { type: 'jpeg', quality: 1 },
+                    html2canvas:  {
+                        scale: pixelRatio,
+                        useCORS: true,
+                        windowWidth: reportEl ? reportEl.scrollWidth : 800,
+                        windowHeight: reportEl ? reportEl.scrollHeight : undefined,
+                        x: 0,
+                        y: 0,
+                        scrollX: 0,
+                        scrollY: 0,
+                        backgroundColor: "#ffffff"
+                    },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['css', 'legacy'], avoid: '.evitar-corte, .plan-block' }
+                };
+
+                // 5. Generamos el PDF y restauramos el scroll a donde estaba el usuario.
+                html2pdf().set(opt).from(element).save().then(() => {
+                    if (scrollContainer) scrollContainer.scrollTop = originalScrollY;
+                    if (scrollXContainer) {
+                        scrollXContainer.scrollLeft = originalScrollX;
+                        scrollXContainer.style.justifyContent = originalJustify;
+                        scrollXContainer.style.alignItems = originalAlign;
+                    }
+                    window.scrollTo(0, originalWindowY);
+                    if (reportEl) {
+                        reportEl.classList.remove('pdf-exporting');
+                        reportEl.style.transform = prevTransform;
+                        reportEl.style.width = prevWidth;
+                        reportEl.style.height = prevHeight;
+                        reportEl.style.overflow = prevOverflow;
+                        reportEl.style.marginLeft = prevMarginLeft;
+                        reportEl.style.marginRight = prevMarginRight;
+                        reportEl.style.position = prevPosition;
+                        reportEl.style.left = prevLeft;
+                    }
+                });
+            };
+
+            return (
+                <div className="min-h-screen md:h-screen w-full flex flex-col md:flex-row font-sans md:overflow-hidden">
+
+                    {/* INPUTS PANEL */}
+                    <div className="w-full md:w-[380px] bg-slate-900 text-slate-300 h-auto md:h-full md:overflow-y-auto flex-shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.5)] z-10 flex flex-col custom-scrollbar">
+                        <div className="p-6 bg-slate-950 border-b border-slate-800 flex items-center sticky top-0 z-20 shadow-md">
+                            <div className="w-10 h-10 bg-blue-600 text-white rounded-lg flex items-center justify-center font-black text-xl mr-4 shadow-lg shadow-blue-900/50">UP</div>
+                            <div>
+                                <h2 className="text-xl font-bold text-white leading-tight">Software Pro</h2>
+                                <p className="text-xs text-blue-400 font-semibold tracking-wide">EDICION HTML5 CANVAS</p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-6 flex-grow">
+                            <div className="space-y-4">
+                                <h3 className="text-white text-sm font-bold border-b border-slate-700 pb-2 flex items-center">
+                                    <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                                    1. Dimensiones y Forma
+                                </h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div><label className="label-pro">Largo Frontal (m)</label><input type="number" step="any" name="largo" value={params.largo} onChange={handleChange} className="input-pro" /></div>
+                                    <div>
+                                        <label className="label-pro">{params.tipoTecho === '2' ? 'Caida Total (m)' : 'Caida (m)'}</label>
+                                        <input type="number" step="any" name="caida" value={params.caida} onChange={handleChange} className="input-pro" />
+                                    </div>
+                                    <div><label className="label-pro">Volado (m)</label><input type="number" step="any" name="volado" value={params.volado} onChange={handleChange} className="input-pro" /></div>
+                                    <div><label className="label-pro">Pendiente (%)</label><input type="number" step="any" name="pendientePercent" value={params.pendientePercent} onChange={handleChange} className="input-pro" /></div>
+                                    <div>
+                                        <label className="label-pro">Tipo de Techo</label>
+                                        <select name="tipoTecho" value={params.tipoTecho} onChange={handleChange} className="input-pro text-white cursor-pointer">
+                                            <option value="1">1 Agua ( / )</option>
+                                            <option value="2">2 Aguas ( /\ )</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label-pro">Tipo de Cubierta</label>
+                                        <select name="tipoCobertura" value={params.tipoCobertura} onChange={handleChange} className="input-pro text-white cursor-pointer">
+                                            <option value="teja">Teja Espanola</option>
+                                            <option value="metal">Metalica 6 ondas</option>
+                                        </select>
+                                    </div>
+                                    <div><label className="label-pro">H. Baja Min (m)</label><input type="number" step="any" name="hBaja" value={params.hBaja} onChange={handleChange} className="input-pro" /></div>
+                                    <div><label className="label-pro">H. Alta Max (m)</label><input type="number" step="any" name="hAlta" value={params.hAlta} onChange={handleChange} className="input-pro" /></div>
+                                </div>
+                                <div className="pt-2">
+                                    <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                        <div className="relative">
+                                            <input type="checkbox" name="usarPendienteAuto" checked={params.usarPendienteAuto} onChange={handleChange} className="sr-only" />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${params.usarPendienteAuto ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.usarPendienteAuto ? 'transform translate-x-4' : ''}`}></div>
+                                        </div>
+                                        <div className="ml-3 text-sm font-semibold text-white">Calcular H. Alta con pendiente</div>
+                                    </label>
+                                    {params.usarPendienteAuto && (
+                                        <p className="mt-2 text-[11px] text-slate-400">H. Alta calculada: {previewHAltaAuto.toFixed(2)} m</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="text-white text-sm font-bold border-b border-slate-700 pb-2 flex items-center">
+                                    <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                                    2. Perfiles Metalicos
+                                </h3>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="label-pro">Perfil Columnas</label>
+                                        <select name="perfilColumna" value={params.perfilColumna} onChange={handleChange} className="input-pro text-white cursor-pointer">
+                                            <option value="Tubo 100x100 en 2mm">Tubo 100x100 en 2mm</option>
+                                            <option value="Tubo 100x100 en 3mm">Tubo 100x100 en 3mm</option>
+                                            <option value="Tubo 75x75 en 2mm">Tubo 75x75 en 2mm</option>
+                                            <option value="Tubo 75x75 en 3mm">Tubo 75x75 en 3mm</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label-pro">Vigas Principales</label>
+                                        <select
+                                            name="perfilViga"
+                                            value={params.perfilViga}
+                                            onChange={handleChange}
+                                            disabled={requiereParTensorUI}
+                                            className={`input-pro text-white cursor-pointer ${requiereParTensorUI ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                        >
+                                            <option value="Tubo Rectangular 100x50 en 2mm">Rectangular 100x50 en 2mm</option>
+                                            <option value="Tubo Rectangular 100x50 en 3mm">Rectangular 100x50 en 3mm</option>
+                                            <option value="Tubo Rectangular 80x40 en 2mm">Rectangular 80x40 en 2mm</option>
+                                            <option value="Tubo Rectangular 80x40 en 3mm">Rectangular 80x40 en 3mm</option>
+                                            <option value="Tubo 100x50 en 2mm">Tubo 100x50 en 2mm</option>
+                                            <option value="Tubo 100x50 en 3mm">Tubo 100x50 en 3mm</option>
+                                            <option value="Tubo 75x75 en 2mm (par + tensor)">Tubo 75x75 en 2mm (par + tensor)</option>
+                                        </select>
+                                        {params.tipoTecho === '2' && (
+                                            <p className="mt-2 text-[11px] text-slate-400">
+                                                Para 2 aguas sin columnas centrales, se aplica par + tensor en 75x75.
+                                            </p>
+                                        )}
+                                        {requiereParTensorUI && (
+                                            <p className="mt-1 text-[11px] text-amber-300">
+                                                Sistema par + tensor aplicado automaticamente.
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="label-pro">Correas (Apoyo Techo)</label>
+                                        <select name="perfilCorrea" value={params.perfilCorrea} onChange={handleChange} className="input-pro text-white cursor-pointer">
+                                            <option value="Correa Tipo G 80x40 en 2mm">Tipo G 80x40 en 2mm</option>
+                                            <option value="Correa Tipo G 60x30 en 2mm">Tipo G 60x30 en 2mm</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="text-white text-sm font-bold border-b border-slate-700 pb-2 flex items-center">
+                                    <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
+                                    3. Detalles Constructivos
+                                </h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="label-pro">Sep. Columnas en largo (frontal) (m)</label>
+                                        <input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="input-pro" />
+                                        <p className="mt-1 text-[11px] text-slate-400">Si define cantidad, se recalcula automaticamente.</p>
+                                    </div>
+                                    <div>
+                                        <label className="label-pro">Cant. columnas en largo</label>
+                                        <input type="number" step="1" min="2" name="numColumnasLargo" value={params.numColumnasLargo} onChange={handleChange} className="input-pro" />
+                                        <p className="mt-1 text-[11px] text-slate-400">Incluye ambos extremos.</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <div><label className="label-pro">Sep. Correas (m)</label><input type="number" step="any" name="sepCorreas" value={params.sepCorreas} onChange={handleChange} className="input-pro" /></div>
+                                    <div></div>
+                                </div>
+                                <div className="pt-2">
+                                    <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                        <div className="relative">
+                                            <input type="checkbox" name="dividirColumnasLargo" checked={params.dividirColumnasLargo} onChange={handleChange} className="sr-only" />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${params.dividirColumnasLargo ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.dividirColumnasLargo ? 'transform translate-x-4' : ''}`}></div>
+                                        </div>
+                                        <div className="ml-3 text-sm font-semibold text-white">Dividir columnas en largo (frontal)</div>
+                                    </label>
+                                </div>
+                                <div className="pt-2 space-y-3">
+                                    <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                        <div className="relative">
+                                            <input type="checkbox" name="incluirVigaUnion" checked={params.incluirVigaUnion} onChange={handleChange} className="sr-only" />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${params.incluirVigaUnion ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.incluirVigaUnion ? 'transform translate-x-4' : ''}`}></div>
+                                        </div>
+                                        <div className="ml-3 text-sm font-semibold text-white">Viga de union entre columnas</div>
+                                    </label>
+                                    {params.incluirVigaUnion && (
+                                        <div>
+                                            <label className="label-pro">Perfil Viga de Union</label>
+                                            <select name="perfilVigaUnion" value={params.perfilVigaUnion} onChange={handleChange} className="input-pro text-white cursor-pointer">
+                                                <option value="Tubo 80x40 en 2mm">Tubo 80x40 en 2mm</option>
+                                                <option value="Tubo 80x40 en 3mm">Tubo 80x40 en 3mm</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                                {params.tipoTecho === '1' && (
+                                    <div className="pt-2 space-y-3">
+                                        <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                            <div className="relative">
+                                                <input type="checkbox" name="incluirColumnasCentrales1Agua" checked={params.incluirColumnasCentrales1Agua} onChange={handleChange} className="sr-only" />
+                                                <div className={`block w-10 h-6 rounded-full transition-colors ${params.incluirColumnasCentrales1Agua ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.incluirColumnasCentrales1Agua ? 'transform translate-x-4' : ''}`}></div>
+                                            </div>
+                                            <div className="ml-3 text-sm font-semibold text-white">Columnas en caida (ancho) (1 agua)</div>
+                                        </label>
+                                        {params.incluirColumnasCentrales1Agua && (
+                                            <div>
+                                                <label className="label-pro">Cantidad de columnas en caida</label>
+                                                <input type="number" step="1" min="2" name="numColumnasCaida" value={params.numColumnasCaida} onChange={handleChange} className="input-pro" />
+                                                <p className="mt-1 text-[11px] text-slate-400">Incluye alero bajo y alero alto.</p>
+                                                <label className="label-pro">Sep. Columnas en caida (m)</label>
+                                                <input type="number" step="any" name="sepColumnasCaida" value={params.sepColumnasCaida} onChange={handleChange} className="input-pro" />
+                                                <p className="mt-1 text-[11px] text-slate-400">Si no divide, esta es la distancia entre columnas; el sobrante queda al final.</p>
+                                                <div className="pt-2">
+                                                    <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                                        <div className="relative">
+                                                            <input type="checkbox" name="dividirColumnasCaida" checked={params.dividirColumnasCaida} onChange={handleChange} className="sr-only" />
+                                                            <div className={`block w-10 h-6 rounded-full transition-colors ${params.dividirColumnasCaida ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.dividirColumnasCaida ? 'transform translate-x-4' : ''}`}></div>
+                                                        </div>
+                                                        <div className="ml-3 text-sm font-semibold text-white">Dividir columnas en caida (tramos iguales)</div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {params.tipoTecho === '2' && (
+                                    <div className="pt-2">
+                                        <label className={`flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border transition-colors ${Number(params.largo) > 10 ? 'border-slate-700 hover:border-blue-500' : 'border-slate-700 opacity-60 cursor-not-allowed'}`}>
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    name="incluirColumnasCentrales"
+                                                    checked={Number(params.largo) > 10 && params.incluirColumnasCentrales}
+                                                    onChange={handleChange}
+                                                    className="sr-only"
+                                                    disabled={Number(params.largo) <= 10}
+                                                />
+                                                <div className={`block w-10 h-6 rounded-full transition-colors ${Number(params.largo) > 10 && params.incluirColumnasCentrales ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${Number(params.largo) > 10 && params.incluirColumnasCentrales ? 'transform translate-x-4' : ''}`}></div>
+                                            </div>
+                                            <div className="ml-3 text-sm font-semibold text-white">
+                                                Columnas centrales en cumbrera (recomendado &gt; 10m)
+                                            </div>
+                                        </label>
+                                        {Number(params.largo) > 10 && !params.incluirColumnasCentrales && (
+                                            <p className="mt-2 text-[11px] text-amber-300">
+                                                Se recomienda colocar columnas centrales. Puede activar la opcion si aplica.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                <div className="pt-2">
+                                    <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                        <div className="relative">
+                                            <input type="checkbox" name="incluirCanales" checked={params.incluirCanales} onChange={handleChange} className="sr-only" />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${params.incluirCanales ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.incluirCanales ? 'transform translate-x-4' : ''}`}></div>
+                                        </div>
+                                        <div className="ml-3 text-sm font-semibold text-white">Incluir Sistema Canales</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-slate-900 border-t border-slate-800 md:hidden">
+                            <button onClick={calcular} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.4)] transition duration-200 text-sm flex justify-center items-center">
+                                PROCESAR CALCULO ESTRUCTURAL
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        className="fixed z-40 pointer-events-none"
+                        style={{
+                            top: `${(floatingPos || { y: 0 }).y}px`,
+                            left: `${(floatingPos || { x: 0 }).x}px`
+                        }}
+                    >
+                        <button
+                            onClick={handleFloatingClick}
+                            aria-label="Procesar calculo estructural"
+                            onPointerDown={handleFloatingPointerDown}
+                            onPointerUp={() => {
+                                if (dragTimerRef.current) {
+                                    clearTimeout(dragTimerRef.current);
+                                    dragTimerRef.current = null;
+                                }
+                            }}
+                            className="pointer-events-auto h-14 w-14 rounded-full bg-blue-600/70 hover:bg-blue-500/80 text-white shadow-[0_0_18px_rgba(37,99,235,0.5)] transition duration-200 flex items-center justify-center cursor-move select-none"
+                        >
+                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M4 20h16" />
+                                <path d="M6 20V8l6-4 6 4v12" />
+                                <path d="M9 20v-6h6v6" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {/* REPORT PANEL */}
+                    <div id="panel-resultados" className="flex-1 w-full md:h-full md:overflow-y-auto bg-slate-100 p-4 md:p-8 flex flex-col items-center relative custom-scrollbar">
+                        {resultados ? (
+                            <div className="w-full flex flex-col items-center">
+                                {/* Boton Descargar Centrado al Contenedor */}
+                                <div className="w-full max-w-[800px] flex justify-end mb-4 sticky top-4 z-50">
+                                    <button onClick={descargarPDF} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-full shadow-xl flex items-center transition duration-200 border-2 border-red-500">
+                                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                        Exportar PDF Exacto
+                                    </button>
+                                </div>
+
+                                {/* CONTENEDOR CON SCROLL EN MOVILES PARA NO ROMPER PDF */}
+                                <div className="w-full overflow-x-auto rounded-lg shadow-2xl custom-scrollbar flex justify-center md:block md:w-auto">
+
+                                    {/* CAJA ESTRICTA DE 800PX PARA CAPTURA PDF PERFECTA */}
+                                    <div id="reporte-pdf" ref={reportRef} className="bg-white p-8 sm:p-10" style={{ width: '800px', minWidth: '800px', minHeight: '1131px', boxSizing: 'border-box' }}>
+
+                                        {/* MEMBRETE y MATERIALES */}
+                                        <div className="evitar-corte" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="border-b-4 border-blue-900 pb-4 mb-6 flex justify-between items-end">
+                                                <div className="flex items-center">
+                                                    <div className="w-14 h-14 bg-blue-900 text-white rounded-md flex items-center justify-center font-black text-2xl shadow-md mr-4 tracking-wider">UP</div>
+                                                    <div>
+                                                        <h1 className="text-3xl font-black text-blue-900 tracking-tight">UP - CONS</h1>
+                                                        <p className="text-gray-500 text-[11px] tracking-widest uppercase font-bold">Ingenieria & Construccion</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right text-xs text-gray-600">
+                                                    <p className="font-bold text-sm text-gray-800">MEMORIA TECNICA (CANVAS ENGINE)</p>
+                                                    <p>Fecha Generacion: {new Date().toLocaleDateString('es-ES')}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mb-6">
+                                                <div className="bg-slate-800 text-white px-3 py-1.5 font-bold uppercase text-sm mb-3 flex items-center">
+                                                    Detalle de Cortes y Uniones
+                                                </div>
+                                                <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-[12px] text-slate-800">
+                                                    <p className="mb-2">
+                                                        Tolerancia de corte aplicada: <span className="font-bold">{resultados.kerfCorte} m</span> por pieza.
+                                                        Uniones permitidas solo entre perfiles iguales: columnas con columnas, vigas con vigas,
+                                                        correas con correas y viga de union con viga de union.
+                                                    </p>
+                                                    <p className="mb-2">
+                                                        Recomendacion: se puede soldar en columnas (carga vertical). En vigas de apoyo se
+                                                        prefiere pieza entera, evitando soldadura en la luz principal.
+                                                    </p>
+                                                    {resultados.parametros.tipoTecho === '2' && (
+                                                        <p className="mb-2">
+                                                            En 2 aguas, la caida total ingresada se divide por lado.
+                                                            Caida total: <span className="font-bold">{round2(resultados.parametros.caida * 2)} m</span> →
+                                                            caida por lado: <span className="font-bold">{round2(resultados.parametros.caida)} m</span>.
+                                                        </p>
+                                                    )}
+                                                    <div className="space-y-3">
+                                                        {resultados.cortesDetalle.map((item, idx) => (
+                                                            <div key={`corte-${idx}`} className="border border-slate-200 rounded-md p-2 bg-white">
+                                                                <div className="font-bold text-slate-900">{item.titulo} — {item.perfil}</div>
+                                                                <div className="text-slate-700">Piezas: {item.resumen}</div>
+                                                                <div className="text-slate-700">
+                                                                    {item.titulo === "Correas"
+                                                                        ? `Correas de 6m (con sobrantes): ${Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.`
+                                                                        : (item.titulo === "Columnas"
+                                                                            ? `Tubos de 6m (con sobrantes): ${Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.`
+                                                                            : `Tubos de 6m: ${item.plan.totalTubos} u.`)}
+                                                                </div>
+                                                                {item.plan.unionesNecesarias > 0 && (
+                                                                    <div className="text-slate-700">Uniones necesarias: {item.plan.unionesNecesarias} (solo {item.perfil})</div>
+                                                                )}
+                                                                <div className="mt-1 text-slate-700">
+                                                                    {(() => {
+                                                                        const netCount = (item.titulo === "Correas" || item.titulo === "Columnas")
+                                                                            ? Math.max(0, item.plan.totalTubos - item.stockRecuperables)
+                                                                            : item.plan.totalTubos;
+                                                                        return item.plan.detalleTubos.slice(0, netCount).map((t, tIdx) => (
+                                                                            <div key={`tubo-${idx}-${tIdx}`}>
+                                                                                {item.titulo === "Correas" ? "Correa" : "Tubo"} #{tIdx + 1}: {t.piezas.join(" + ")} m — Sobrante: {t.sobrante} m
+                                                                            </div>
+                                                                        ));
+                                                                    })()}
+                                                                </div>
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && Object.keys(item.plan.sobrantesMap || {}).length > 0 && (
+                                                                    <div className="mt-1 text-slate-700">
+                                                                        {Object.entries(item.plan.sobrantesMap).map(([lenStr, count]) => {
+                                                                            const len = Number(lenStr);
+                                                                            const totalLen = round2(len * count);
+                                                                            const ratio = item.recoveryUnit / len;
+                                                                            const ratioInt = Math.abs(ratio - Math.round(ratio)) < 1e-6 ? Math.round(ratio) : null;
+                                                                            const unidades = Math.floor(totalLen / item.recoveryUnit);
+                                                                            const sobranteFinal = round2(totalLen - (unidades * item.recoveryUnit));
+                                                                            return (
+                                                                                <div key={`sobrante-${idx}-${lenStr}`}>
+                                                                                    Sobrantes: {count} x {lenStr} m. {unidades > 0
+                                                                                        ? (ratioInt
+                                                                                            ? `Unir ${ratioInt} piezas de ${lenStr} m -> ${unidades} ${item.titulo === "Correas" ? "correas" : "columnas"} de ${round2(item.recoveryUnit)} m.`
+                                                                                            : `Unir sobrantes hasta ${round2(item.recoveryUnit)} m -> ${unidades} ${item.titulo === "Correas" ? "correas" : "columnas"}.`)
+                                                                                        : "No alcanza para una pieza completa."}
+                                                                                    {sobranteFinal > 0 ? ` Sobrante restante: ${sobranteFinal} m.` : ""}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && item.stockRecuperables > 0 && (
+                                                                    <div className="mt-1 text-slate-700 font-semibold">
+                                                                        Piezas adicionales formadas por sobrantes: {item.stockRecuperables} u.
+                                                                    </div>
+                                                                )}
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && (
+                                                                    <div className="mt-1 text-slate-700">
+                                                                        Sobrante util para unir: {round2(item.stockRecuperables * item.recoveryUnit)} m. Sobrante restante: {item.sobranteRestante} m.
+                                                                    </div>
+                                                                )}
+                                                                {item.titulo === "Columnas" && item.stockRecuperables > 0 && (
+                                                                    <div className="mt-1 text-slate-700">
+                                                                        Nota: estas piezas adicionales no reducen la compra actual de tubos.
+                                                                    </div>
+                                                                )}
+                                                                <div className="mt-1 text-slate-700 font-semibold">
+                                                                    Sobrante total generado: {item.plan.totalSobrante} m (unible solo con {item.perfil})
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mb-6">
+                                                <div className="bg-blue-900 text-white px-3 py-1.5 font-bold uppercase text-sm mb-3 flex items-center">
+                                                    Listado de Materiales y Perfiles
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                                                        <h3 className="font-bold text-gray-800 text-xs uppercase mb-2 border-b border-gray-300 pb-1">Estructura Metalica</h3>
+                                                        <ul className="space-y-2 text-sm text-gray-700">
+                                                            <li className="flex justify-between items-center border-b border-gray-200 pb-1">
+                                                                <span className="font-medium">{resultados.parametros.perfilColumna}</span>
+                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosColumnasConSobrantes} tubos (6m) <span className="text-[10px] text-slate-500">(con sobrantes)</span></span>
+                                                            </li>
+                                                            {resultados.cortesDetalle?.find((item) => item.titulo === "Columnas")?.stockRecuperables > 0 && (
+                                                                <li className="flex justify-between items-center border-b border-gray-200 pb-1 text-[11px] text-slate-500">
+                                                                    <span>Columnas formables con sobrantes</span>
+                                                                    <span className="font-semibold">{resultados.cortesDetalle.find((item) => item.titulo === "Columnas").stockRecuperables} u.</span>
+                                                                </li>
+                                                            )}
+                                                            <li className="flex justify-between items-center border-b border-gray-200 pb-1">
+                                                                <span className="font-medium">{resultados.parametros.perfilViga}</span>
+                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosVigas} tubos (6m)</span>
+                                                            </li>
+                                                            {resultados.parametros.incluirVigaUnion && (
+                                                                <li className="flex justify-between items-center border-b border-gray-200 pb-1">
+                                                                    <span className="font-medium">{resultados.parametros.perfilVigaUnion}</span>
+                                                                    <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosVigaUnion} tubos (6m)</span>
+                                                                </li>
+                                                            )}
+                                                            <li className="flex justify-between items-center pb-1">
+                                                                <span className="font-medium">{resultados.parametros.perfilCorrea}</span>
+                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosCorreasConSobrantes} correas (6m) <span className="text-[10px] text-slate-500">(con sobrantes)</span></span>
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+
+                                                    <div className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                                                        <h3 className="font-bold text-gray-800 text-xs uppercase mb-2 border-b border-gray-300 pb-1">Planchas de Cubierta</h3>
+                                                        <ul className="space-y-2 text-sm text-gray-700">
+                                                            {Object.entries(resultados.desgloseTejas).map(([medida, cantidad]) => (
+                                                                <li key={medida} className="flex justify-between items-center border-b border-gray-200 pb-1">
+                                                                    <span className="font-medium">{resultados.parametros.coberturaNombre} de {medida} m</span>
+                                                                    <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-orange-700">{cantidad} u.</span>
+                                                                </li>
+                                                            ))}
+                                                            {resultados.cumbreros > 0 && (
+                                                                <li className="flex justify-between items-center border-b border-gray-200 pb-1">
+                                                                    <span className="font-medium">Cumbreros (1.05m)</span>
+                                                                    <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-red-700">{resultados.cumbreros} u.</span>
+                                                                </li>
+                                                            )}
+                                                            <li className="flex justify-between items-center pb-1">
+                                                                <span className="font-medium flex items-center">
+                                                                    {resultados.parametros.tornillosLabel} <br/>
+                                                                    <span className="text-[10px] text-gray-500 ml-1"> (9 p/plancha {resultados.cumbreros > 0 && '+ 4 p/cum'})</span>
+                                                                </span>
+                                                                <span className="font-bold text-blue-900 bg-blue-100 px-2 py-1 rounded">{resultados.totalTornillos} u.</span>
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+
+                                                {resultados.canalesDetalle && (
+                                                    <div className="mt-3 border border-blue-200 rounded-md p-3 bg-blue-50/50">
+                                                        <h3 className="font-bold text-blue-900 text-xs uppercase mb-2">Detalle de Canales de Lluvia</h3>
+                                                        <div className="grid grid-cols-4 gap-2 text-sm text-gray-800">
+                                                            {resultados.canalesDetalle.c6 > 0 && <div>Tramo 6m: <span className="font-bold">{resultados.canalesDetalle.c6}</span></div>}
+                                                            {resultados.canalesDetalle.c5 > 0 && <div>Tramo 5m: <span className="font-bold">{resultados.canalesDetalle.c5}</span></div>}
+                                                            {resultados.canalesDetalle.c4 > 0 && <div>Tramo 4m: <span className="font-bold">{resultados.canalesDetalle.c4}</span></div>}
+                                                            {resultados.canalesDetalle.c3 > 0 && <div>Tramo 3m: <span className="font-bold">{resultados.canalesDetalle.c3}</span></div>}
+                                                            <div>Tapas Ext.: <span className="font-bold">{resultados.canalesDetalle.tapas}</span></div>
+                                                            <div>Pitones: <span className="font-bold">{resultados.canalesDetalle.pitones}</span></div>
+                                                            <div>Abrazaderas: <span className="font-bold">{resultados.canalesDetalle.ganchos}</span></div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {resultados.recomendaciones && resultados.recomendaciones.length > 0 && (
+                                                    <div className="mt-3 border border-amber-200 rounded-md p-3 bg-amber-50">
+                                                        <h3 className="font-bold text-amber-900 text-xs uppercase mb-2">Recomendaciones</h3>
+                                                        <ul className="list-disc pl-4 text-sm text-amber-900 space-y-1">
+                                                            {resultados.recomendaciones.map((msg, idx) => (
+                                                                <li key={idx}>{msg}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                                {!resultados.parametros.cortesAlineados && (
+                                                    <div className="mt-3 border border-blue-200 rounded-md p-3 bg-blue-50">
+                                                        <div className="font-bold text-blue-900 text-xs uppercase mb-2">Reajuste de Correas</div>
+                                                        <div className="text-sm text-blue-900">
+                                                            Separacion sugerida: <span className="font-bold">{resultados.parametros.sepCorreasSugerida} m</span> para alinear traslapes.
+                                                        </div>
+                                                        <label className="mt-2 flex items-center gap-2 text-sm text-blue-900">
+                                                            <input type="checkbox" checked={aceptarReajusteCorreas} onChange={(e) => setAceptarReajusteCorreas(e.target.checked)} />
+                                                            Acepto reajustar correas
+                                                        </label>
+                                                        <button
+                                                            onClick={handleReajustarCorreas}
+                                                            className="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded"
+                                                        >
+                                                            Reajustar correas
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* TITULO PLANOS */}
+                                        <div className="evitar-corte bg-blue-900 text-white px-3 py-1.5 font-bold uppercase text-sm mb-4" style={{ pageBreakInside: 'avoid' }}>
+                                            Esquemas Tecnicos Autogenerados (Rendering Engine: HTML5 Canvas)
+                                        </div>
+
+                                        {/* PLANO 1 (Elevacion) */}
+                                        <div className="evitar-corte plan-block border border-gray-300 rounded p-2 shadow-sm bg-white mb-3 relative" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="flex items-start justify-between">
+                                                <h4 className="font-bold text-gray-800 text-xs mb-2 uppercase">Plano 1: Elevacion Estructural Lateral</h4>
+                                                <button
+                                                    onClick={() => togglePlanConfig('elevacion')}
+                                                    aria-label="Configurar plano de elevacion"
+                                                    className="h-6 w-6 rounded-full bg-slate-200/80 hover:bg-slate-200 text-slate-700 flex items-center justify-center"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <circle cx="12" cy="12" r="3" />
+                                                        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            {activePlanConfig === 'elevacion' && (
+                                                <div className="absolute top-8 right-2 z-10 w-72 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                    <div className="font-bold text-slate-700 mb-2">Configurar elevacion</div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <label className="flex flex-col">Caida (m)<input type="number" step="any" name="caida" value={params.caida} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">Volado (m)<input type="number" step="any" name="volado" value={params.volado} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">H. Baja (m)<input type="number" step="any" name="hBaja" value={params.hBaja} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">H. Alta (m)<input type="number" step="any" name="hAlta" value={params.hAlta} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">Pendiente (%)<input type="number" step="any" name="pendientePercent" value={params.pendientePercent} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex items-center gap-2 mt-4"><input type="checkbox" name="usarPendienteAuto" checked={params.usarPendienteAuto} onChange={handleChange} /> Auto</label>
+                                                    </div>
+                                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                                        <label className="flex flex-col">Sep. largo (m)<input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">Cant. largo<input type="number" step="1" min="2" name="numColumnasLargo" value={params.numColumnasLargo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">Sep. caida (m)<input type="number" step="any" name="sepColumnasCaida" value={params.sepColumnasCaida} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                        <label className="flex flex-col">Cant. caida<input type="number" step="1" min="2" name="numColumnasCaida" value={params.numColumnasCaida} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    </div>
+                                                    <div className="mt-2 flex flex-wrap gap-3">
+                                                        <label className="flex items-center gap-2"><input type="checkbox" name="dividirColumnasLargo" checked={params.dividirColumnasLargo} onChange={handleChange} /> Dividir largo</label>
+                                                        <label className="flex items-center gap-2"><input type="checkbox" name="dividirColumnasCaida" checked={params.dividirColumnasCaida} onChange={handleChange} /> Dividir caida</label>
+                                                        <label className="flex items-center gap-2"><input type="checkbox" name="incluirColumnasCentrales1Agua" checked={params.incluirColumnasCentrales1Agua} onChange={handleChange} /> Columnas caida</label>
+                                                    </div>
+                                                    <div className="mt-3 flex justify-end">
+                                                        <button
+                                                            onClick={() => setActivePlanConfig(null)}
+                                                            className="px-3 py-1 rounded bg-blue-600 text-white text-[11px]"
+                                                        >
+                                                            Aceptar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <ElevationCanvas parametros={resultados.parametros} />
+                                        </div>
+
+                                        {/* PLANO 2 (Vigas) */}
+                                        <div className="evitar-corte plan-block plan-block--page border border-gray-300 rounded p-2 shadow-sm bg-white mb-3 relative" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="flex items-start justify-between">
+                                                <h4 className="font-bold text-gray-800 text-xs mb-2 uppercase">Plano 2: Planta de Vigas Principales y Columnas</h4>
+                                                <button
+                                                    onClick={() => togglePlanConfig('planta')}
+                                                    aria-label="Configurar plano de planta"
+                                                    className="h-6 w-6 rounded-full bg-slate-200/80 hover:bg-slate-200 text-slate-700 flex items-center justify-center"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <circle cx="12" cy="12" r="3" />
+                                                        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            {activePlanConfig === 'planta' && (
+                                                <div className="absolute top-8 right-2 z-10 w-64 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                    <div className="font-bold text-slate-700 mb-2">Configurar planta</div>
+                                                    <label className="flex flex-col mb-2">Sep. largo (m)<input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    <label className="flex flex-col mb-2">Cant. columnas<input type="number" step="1" min="2" name="numColumnasLargo" value={params.numColumnasLargo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    <label className="flex items-center gap-2"><input type="checkbox" name="dividirColumnasLargo" checked={params.dividirColumnasLargo} onChange={handleChange} /> Dividir largo</label>
+                                                    <div className="mt-3 flex justify-end">
+                                                        <button
+                                                            onClick={() => setActivePlanConfig(null)}
+                                                            className="px-3 py-1 rounded bg-blue-600 text-white text-[11px]"
+                                                        >
+                                                            Aceptar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <ColumnsVigasCanvas resultados={resultados} />
+                                        </div>
+
+                                        {/* PLANO 3 (Correas) */}
+                                        <div className="evitar-corte plan-block plan-block--page border border-gray-300 rounded p-2 shadow-sm bg-white mb-3 relative" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="flex items-start justify-between">
+                                                <h4 className="font-bold text-gray-800 text-xs mb-2 uppercase">Plano 3: Distribucion de Correas Longitudinales</h4>
+                                                <button
+                                                    onClick={() => togglePlanConfig('correas')}
+                                                    aria-label="Configurar plano de correas"
+                                                    className="h-6 w-6 rounded-full bg-slate-200/80 hover:bg-slate-200 text-slate-700 flex items-center justify-center"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <circle cx="12" cy="12" r="3" />
+                                                        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            {activePlanConfig === 'correas' && (
+                                                <div className="absolute top-8 right-2 z-10 w-56 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                    <div className="font-bold text-slate-700 mb-2">Configurar correas</div>
+                                                    <label className="flex flex-col mb-2">Sep. correas (m)<input type="number" step="any" name="sepCorreas" value={params.sepCorreas} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    <label className="flex flex-col">Largo (m)<input type="number" step="any" name="largo" value={params.largo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    <div className="mt-3 flex justify-end">
+                                                        <button
+                                                            onClick={() => setActivePlanConfig(null)}
+                                                            className="px-3 py-1 rounded bg-blue-600 text-white text-[11px]"
+                                                        >
+                                                            Aceptar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <CorreasCanvas resultados={resultados} />
+                                        </div>
+
+                                        {/* PLANO 4 (Tejas) */}
+                                        <div className="evitar-corte plan-block plan-block--page border border-orange-300 rounded p-2 shadow-sm bg-white mb-3 relative" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="flex items-start justify-between">
+                                                <h4 className="font-bold text-orange-800 text-xs mb-2 uppercase">Plano 4: Distribucion de Teja Espanola y Detalles Constructivos</h4>
+                                                <button
+                                                    onClick={() => togglePlanConfig('tejas')}
+                                                    aria-label="Configurar plano de tejas"
+                                                    className="h-6 w-6 rounded-full bg-slate-200/80 hover:bg-slate-200 text-slate-700 flex items-center justify-center"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <circle cx="12" cy="12" r="3" />
+                                                        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            {activePlanConfig === 'tejas' && (
+                                                <div className="absolute top-8 right-2 z-10 w-60 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                    <div className="font-bold text-slate-700 mb-2">Configurar tejas</div>
+                                                    <label className="flex flex-col mb-2">Tipo cubierta
+                                                        <select name="tipoCobertura" value={params.tipoCobertura} onChange={handleChange} className="border rounded px-2 py-1">
+                                                            <option value="teja">Teja Espanola</option>
+                                                            <option value="metal">Metalica 6 ondas</option>
+                                                        </select>
+                                                    </label>
+                                                    <label className="flex flex-col mb-2">Largo (m)<input type="number" step="any" name="largo" value={params.largo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    <label className="flex flex-col">Caida (m)<input type="number" step="any" name="caida" value={params.caida} onChange={handleChange} className="border rounded px-2 py-1" /></label>
+                                                    <div className="mt-3 flex justify-end">
+                                                        <button
+                                                            onClick={() => setActivePlanConfig(null)}
+                                                            className="px-3 py-1 rounded bg-blue-600 text-white text-[11px]"
+                                                        >
+                                                            Aceptar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <TejasCanvas resultados={resultados} />
+                                        </div>
+
+                                        {/* PLANO 5 (Canales) - Si aplica */}
+                                        {resultados.parametros.incluirCanales && (
+                                            <div className="evitar-corte plan-block plan-block--page border border-blue-200 rounded p-2 shadow-sm bg-white mb-3 relative" style={{ pageBreakInside: 'avoid' }}>
+                                                <div className="flex items-start justify-between">
+                                                    <h4 className="font-bold text-blue-900 text-xs mb-2 uppercase">Plano 5: Recorrido e Instalacion de Canales</h4>
+                                                    <button
+                                                        onClick={() => togglePlanConfig('canales')}
+                                                        aria-label="Configurar plano de canales"
+                                                        className="h-6 w-6 rounded-full bg-slate-200/80 hover:bg-slate-200 text-slate-700 flex items-center justify-center"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <circle cx="12" cy="12" r="3" />
+                                                            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                {activePlanConfig === 'canales' && (
+                                                    <div className="absolute top-8 right-2 z-10 w-52 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                        <div className="font-bold text-slate-700 mb-2">Configurar canales</div>
+                                                        <label className="flex items-center gap-2"><input type="checkbox" name="incluirCanales" checked={params.incluirCanales} onChange={handleChange} /> Incluir canales</label>
+                                                        <label className="flex flex-col mt-2">Pitones bajantes
+                                                            <input type="number" step="1" min="0" name="pitonesCustom" value={params.pitonesCustom} onChange={handleChange} className="border rounded px-2 py-1" />
+                                                        </label>
+                                                        <label className="flex flex-col mt-2">Soportes / ganchos
+                                                            <input type="number" step="1" min="0" name="ganchosCustom" value={params.ganchosCustom} onChange={handleChange} className="border rounded px-2 py-1" />
+                                                        </label>
+                                                        <div className="mt-3 flex justify-end">
+                                                            <button
+                                                                onClick={() => setActivePlanConfig(null)}
+                                                                className="px-3 py-1 rounded bg-blue-600 text-white text-[11px]"
+                                                            >
+                                                                Aceptar
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <CanalesCanvas resultados={resultados} />
+                                            </div>
+                                        )}
+
+                                        {/* Forzar siempre Salto a la Pagina Final (Detalle) */}
+                                        <div className="html2pdf__page-break" style={{ pageBreakBefore: 'always', margin: 0, padding: 0 }}></div>
+
+                                        {/* HOJA FINAL (Detalle tipo Excel) */}
+                                        <div className="evitar-corte border border-gray-300 rounded p-4 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
+                                            <h4 className="font-bold text-gray-800 text-xs mb-3 uppercase">Detalle Final de Materiales</h4>
+                                            <table className="w-full text-[11px] text-gray-800 border border-gray-300">
+                                                <thead className="bg-gray-100">
+                                                    <tr>
+                                                        <th className="border border-gray-300 px-2 py-1 text-left">Producto</th>
+                                                        <th className="border border-gray-300 px-2 py-1 text-left">Especificacion</th>
+                                                        <th className="border border-gray-300 px-2 py-1 text-right">Cantidad</th>
+                                                        <th className="border border-gray-300 px-2 py-1 text-left">Unidad</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td className="border border-gray-300 px-2 py-1">Columnas</td>
+                                                        <td className="border border-gray-300 px-2 py-1">{resultados.parametros.perfilColumna}</td>
+                                                        <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosColumnasConSobrantes}</td>
+                                                        <td className="border border-gray-300 px-2 py-1">tubos de 6m</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="border border-gray-300 px-2 py-1">Vigas principales</td>
+                                                        <td className="border border-gray-300 px-2 py-1">{resultados.parametros.perfilViga}</td>
+                                                        <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosVigas}</td>
+                                                        <td className="border border-gray-300 px-2 py-1">tubos de 6m</td>
+                                                    </tr>
+                                                    {resultados.parametros.incluirVigaUnion && (
+                                                        <tr>
+                                                            <td className="border border-gray-300 px-2 py-1">Viga de union</td>
+                                                            <td className="border border-gray-300 px-2 py-1">{resultados.parametros.perfilVigaUnion}</td>
+                                                            <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosVigaUnion}</td>
+                                                            <td className="border border-gray-300 px-2 py-1">tubos de 6m</td>
+                                                        </tr>
+                                                    )}
+                                                    <tr>
+                                                        <td className="border border-gray-300 px-2 py-1">Correas</td>
+                                                        <td className="border border-gray-300 px-2 py-1">{resultados.parametros.perfilCorrea}</td>
+                                                        <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosCorreas}</td>
+                                                        <td className="border border-gray-300 px-2 py-1">correas de 6m</td>
+                                                    </tr>
+                                                    {Object.entries(resultados.desgloseTejas).map(([medida, cantidad]) => (
+                                                        <tr key={`teja-detalle-${medida}`}>
+                                                            <td className="border border-gray-300 px-2 py-1">{resultados.parametros.coberturaNombre}</td>
+                                                            <td className="border border-gray-300 px-2 py-1">{medida} m</td>
+                                                            <td className="border border-gray-300 px-2 py-1 text-right">{cantidad}</td>
+                                                            <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                        </tr>
+                                                    ))}
+                                                    {resultados.cumbreros > 0 && (
+                                                        <tr>
+                                                            <td className="border border-gray-300 px-2 py-1">Cumbreros</td>
+                                                            <td className="border border-gray-300 px-2 py-1">1.05 m</td>
+                                                            <td className="border border-gray-300 px-2 py-1 text-right">{resultados.cumbreros}</td>
+                                                            <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                        </tr>
+                                                    )}
+                                                    <tr>
+                                                        <td className="border border-gray-300 px-2 py-1">{resultados.parametros.tornillosLabel}</td>
+                                                        <td className="border border-gray-300 px-2 py-1">9 p/plancha + extras cumbrero</td>
+                                                        <td className="border border-gray-300 px-2 py-1 text-right">{resultados.totalTornillos}</td>
+                                                        <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                    </tr>
+                                                    {resultados.canalesDetalle && (
+                                                        <>
+                                                            {resultados.canalesDetalle.c6 > 0 && (
+                                                                <tr>
+                                                                    <td className="border border-gray-300 px-2 py-1">Canal lluvia</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">Tramo 6 m</td>
+                                                                    <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.c6}</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                                </tr>
+                                                            )}
+                                                            {resultados.canalesDetalle.c5 > 0 && (
+                                                                <tr>
+                                                                    <td className="border border-gray-300 px-2 py-1">Canal lluvia</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">Tramo 5 m</td>
+                                                                    <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.c5}</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                                </tr>
+                                                            )}
+                                                            {resultados.canalesDetalle.c4 > 0 && (
+                                                                <tr>
+                                                                    <td className="border border-gray-300 px-2 py-1">Canal lluvia</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">Tramo 4 m</td>
+                                                                    <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.c4}</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                                </tr>
+                                                            )}
+                                                            {resultados.canalesDetalle.c3 > 0 && (
+                                                                <tr>
+                                                                    <td className="border border-gray-300 px-2 py-1">Canal lluvia</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">Tramo 3 m</td>
+                                                                    <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.c3}</td>
+                                                                    <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                                </tr>
+                                                            )}
+                                                            <tr>
+                                                                <td className="border border-gray-300 px-2 py-1">Tapas</td>
+                                                                <td className="border border-gray-300 px-2 py-1">Extremos</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.tapas}</td>
+                                                                <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td className="border border-gray-300 px-2 py-1">Pitones</td>
+                                                                <td className="border border-gray-300 px-2 py-1">Desague</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.pitones}</td>
+                                                                <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td className="border border-gray-300 px-2 py-1">Abrazaderas</td>
+                                                                <td className="border border-gray-300 px-2 py-1">Ganchos soporte</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-right">{resultados.canalesDetalle.ganchos}</td>
+                                                                <td className="border border-gray-300 px-2 py-1">unid.</td>
+                                                            </tr>
+                                                        </>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* FOOTER GENERAL */}
+                                        <div className="evitar-corte mt-6 pt-3 border-t border-gray-200 text-center text-gray-400 text-[9px] font-bold tracking-[0.2em] uppercase" style={{ pageBreakInside: 'avoid' }}>
+                                            UP-CONS INGENIERIA | CONTROL DE OBRA Y PRESUPUESTOS
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="h-full flex flex-col justify-center items-center text-gray-400 my-auto min-h-[50vh]">
+                                <svg className="w-24 h-24 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                <p className="text-lg font-medium text-slate-500">Configure los parametros a la izquierda</p>
+                                <p className="text-sm text-slate-400">Presione "Procesar" para generar la memoria de calculo</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

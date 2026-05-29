@@ -1206,6 +1206,7 @@
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirModalTextoMateriales()" title="Pegar lista de materiales" aria-label="Pegar lista de materiales">📝<span>Lista</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorImagenMateriales()" title="Leer lista desde imagen" aria-label="Leer lista desde imagen">📷<span>Imagen</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="abrirSelectorProformaImagen()" title="Cargar proforma desde JPG" aria-label="Cargar proforma desde JPG">🧾<span>JPG</span></button>
+                                <button class="proforma-action-btn glass-action-btn" onclick="abrirCalculadoraMateriales()" title="Calcular materiales para cotizar" aria-label="Calcular materiales para cotizar">🧮<span>Calc.</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="mostrarModalNombreArchivo()" title="Guardar proforma" aria-label="Guardar proforma">💾<span>Guardar</span></button>
                                 <button class="proforma-action-btn glass-action-btn" onclick="cargarPagina()" title="Cargar proforma" aria-label="Cargar proforma">⬆️<span>Cargar</span></button>
                             </div>
@@ -2905,6 +2906,29 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleTopQuotedDrawer(false);
     });
 });
+
+function abrirCalculadoraMateriales() {
+    const urlLocal = 'index2.html';
+    const urlExterna = 'https://googl-maps-geo.github.io/CALCULAMATERIAL/';
+
+    const abrirEnNuevaPestana = (url) => {
+        const ventana = window.open(url, '_blank');
+        if (!ventana) {
+            alert('No se pudo abrir la calculadora. Permite ventanas emergentes para este sitio.');
+            return;
+        }
+        ventana.opener = null;
+    };
+
+    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+        fetch(urlLocal, { method: 'HEAD', cache: 'no-store' })
+            .then(response => abrirEnNuevaPestana(response.ok ? urlLocal : urlExterna))
+            .catch(() => abrirEnNuevaPestana(urlExterna));
+        return;
+    }
+
+    abrirEnNuevaPestana(urlLocal);
+}
   // otras funciones...
 
 
