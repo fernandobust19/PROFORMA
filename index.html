@@ -5501,7 +5501,7 @@ function abrirCalculadoraMateriales() {
             }
 
             const siguiente = limpiarLineaProformaImagenOCR(lineas[i + 1] || '');
-            if (siguiente && !/^[:.-]?$/.test(siguiente)) return siguiente;
+            if (siguiente && !/^[:.-]?$/.test(siguiente) && !esLineaMetaProformaImagen(siguiente)) return siguiente;
         }
         return '';
     }
@@ -5526,15 +5526,28 @@ function abrirCalculadoraMateriales() {
 
     function extraerPreciosConIndiceProformaImagen(linea) {
         const texto = String(linea || '');
-        const regex = /[$S]\s*\d{1,7}(?:[.,]\d{2})|\b\d{1,7}[.,]\d{2}\b/gi;
+        const regex = /(?:[$]|\bS)\s*\d{1,7}(?:[.,]\d{2})|\b\d{1,7}[.,]\d{2}\b/gi;
         const matches = [...texto.matchAll(regex)].map(match => ({
             raw: match[0],
             index: match.index || 0,
             value: parsearDineroProformaImagen(match[0])
         })).filter(item => isFinite(item.value) && item.value > 0);
 
-        if (!/[$S]/i.test(texto) && matches.length < 2) return [];
-        return matches;
+        if (/(?:[$]\s*\d|\bS\s*\d)/i.test(texto)) return matches;
+
+        const matchesSinMedidas = matches.filter(item => {
+            const inicio = item.index;
+            const fin = inicio + item.raw.length;
+            const antes = texto.slice(Math.max(0, inicio - 8), inicio);
+            const despues = texto.slice(fin, Math.min(texto.length, fin + 10));
+            return !(
+                /^\s*(m|mt|mts|metro|metros|mm|cm|pulg|["']|x|×)\b/i.test(despues) ||
+                /(?:\b|[0-9])\s*(x|×)\s*$/i.test(antes)
+            );
+        });
+
+        if (matchesSinMedidas.length < 2) return [];
+        return matchesSinMedidas;
     }
 
     function medianaNumerosProformaImagen(valores) {
@@ -5887,6 +5900,21 @@ function abrirCalculadoraMateriales() {
         return normalizarCantidadDecimal(match[0]);
     }
 
+    function celdaTieneMonedaProformaImagen(palabras) {
+        const texto = unirPalabrasCeldaProformaImagen(palabras);
+        return /(?:[$]\s*\d|(?:^|\s)S\s*\d)/i.test(texto);
+    }
+
+    function importeFilaPlausibleProformaImagen(cantidad, precio, subtotal) {
+        if (!isFinite(cantidad) || cantidad <= 0 || !isFinite(precio) || precio <= 0 || !isFinite(subtotal) || subtotal <= 0) {
+            return false;
+        }
+
+        const esperado = cantidad * precio;
+        const tolerancia = Math.max(0.05, Math.abs(subtotal) * 0.04);
+        return Math.abs(esperado - subtotal) <= tolerancia;
+    }
+
     function extraerProductosProformaImagenDesdeCajas(datosOCR) {
         const palabras = obtenerPalabrasProformaImagenOCR(datosOCR);
         if (!palabras.length) return [];
@@ -5913,9 +5941,13 @@ function abrirCalculadoraMateriales() {
             const textoLinea = unirPalabrasCeldaProformaImagen(linea.words);
             if (esLineaMetaProformaImagen(textoLinea)) return;
 
+            const cantidad = extraerCantidadCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(porColumna[1]));
             const precio = extraerDineroCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(porColumna[2]));
             const subtotal = extraerDineroCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(porColumna[3]));
-            if (isFinite(precio) || isFinite(subtotal)) {
+            const tieneMoneda = celdaTieneMonedaProformaImagen(porColumna[2]) || celdaTieneMonedaProformaImagen(porColumna[3]);
+            const importesPlausibles = importeFilaPlausibleProformaImagen(cantidad, precio, subtotal);
+
+            if ((isFinite(precio) || isFinite(subtotal)) && (tieneMoneda || importesPlausibles)) {
                 anchors.push(linea.cy);
             }
         });
@@ -5947,11 +5979,14 @@ function abrirCalculadoraMateriales() {
             });
 
             const nombre = limpiarNombreCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(columnas[0]));
-            let cantidad = extraerCantidadCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(columnas[1]));
+            const cantidadTexto = unirPalabrasCeldaProformaImagen(columnas[1]);
+            let cantidad = extraerCantidadCasilleroProformaImagen(cantidadTexto);
+            const cantidadExplicita = isFinite(cantidad);
             const precio = extraerDineroCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(columnas[2]));
             const subtotal = extraerDineroCasilleroProformaImagen(unirPalabrasCeldaProformaImagen(columnas[3]));
+            const tieneMoneda = celdaTieneMonedaProformaImagen(columnas[2]) || celdaTieneMonedaProformaImagen(columnas[3]);
 
-            if (!isFinite(cantidad) && isFinite(precio) && isFinite(subtotal) && precio > 0) {
+            if (!cantidadExplicita && isFinite(precio) && isFinite(subtotal) && precio > 0 && tieneMoneda) {
                 cantidad = normalizarCantidadDecimal(subtotal / precio);
             }
 
@@ -5959,7 +5994,10 @@ function abrirCalculadoraMateriales() {
                 const calculado = precio * cantidad;
                 const tolerancia = Math.max(0.05, Math.abs(subtotal) * 0.03);
                 const inferida = normalizarCantidadDecimal(subtotal / precio);
-                if (Math.abs(calculado - subtotal) > tolerancia && isFinite(inferida) && inferida > 0) {
+                if (!tieneMoneda && Math.abs(calculado - subtotal) > tolerancia) {
+                    return;
+                }
+                if (!cantidadExplicita && Math.abs(calculado - subtotal) > tolerancia && isFinite(inferida) && inferida > 0) {
                     cantidad = inferida;
                 }
             }
@@ -6074,10 +6112,7 @@ function abrirCalculadoraMateriales() {
 
         const productosPorCajas = extraerProductosProformaImagenDesdeCajas(fuenteOCR);
         const productosPorTexto = extraerProductosProformaImagen(lineas);
-        const usarProductosPorCajas = productosPorCajas.length > 0 && (
-            !productosPorTexto.length ||
-            productosPorCajas.length >= Math.max(1, Math.ceil(productosPorTexto.length * 0.6))
-        );
+        const usarProductosPorCajas = productosPorCajas.length > 0;
 
         return {
             cliente: cliente || 'CONSUMIDOR FINAL',
